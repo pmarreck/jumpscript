@@ -1,0 +1,250 @@
+#!/usr/bin/env bash
+# jumpscript_simple - A simplified version of jumpscript for testing
+# Author: pmarreck
+# License: MIT
+
+set -e
+
+VERSION="0.1.0"
+CACHE_DIR="$HOME/.cache/jumpscript"
+PLUGIN_DIR="$(dirname "$(realpath "$0")")/plugins"
+
+# Ensure cache directory exists
+mkdir -p "$CACHE_DIR"
+
+# Print usage information
+usage() {
+    echo "Usage: jumpscript_simple [OPTIONS] LANG SCRIPT [ARGS...]"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help      Show this help message and exit"
+    echo "  -v, --version   Show version information and exit"
+    echo ""
+    echo "Arguments:"
+    echo "  LANG            Language to use (C, C++, Rust, etc.)"
+    echo "  SCRIPT          Script file to execute"
+    echo "  ARGS...         Arguments to pass to the script"
+    echo ""
+    echo "jumpscript_simple is a simplified version of jumpscript for testing."
+    exit 0
+}
+
+# Print version information
+version() {
+    echo "jumpscript_simple version $VERSION"
+    exit 0
+}
+
+# Parse command-line options
+FORCE_REBUILD=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            ;;
+        -v|--version)
+            version
+            ;;
+        --force-rebuild)
+            FORCE_REBUILD=true
+            ;;
+        *)
+            break
+            ;;
+    esac
+    shift
+done
+
+# Check if we have enough arguments
+if [[ $# -lt 2 ]]; then
+    echo "Error: Both LANG and SCRIPT must be provided" >&2
+    usage
+fi
+
+# Get the language and script path
+LANG="$1"
+SCRIPT_PATH="$2"
+shift 2
+
+# Check if the script exists
+if [[ ! -f "$SCRIPT_PATH" ]]; then
+    echo "Error: Script '$SCRIPT_PATH' not found" >&2
+    exit 1
+fi
+
+# Get the absolute path of the script
+SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
+SCRIPT_NAME=$(basename "$SCRIPT_PATH")
+SCRIPT_MTIME=$(stat -c %Y "$SCRIPT_PATH" 2>/dev/null || stat -f %m "$SCRIPT_PATH")
+ARCH=$(uname -m)
+OS=$(uname -s)
+BINARY_CACHE="$CACHE_DIR/$SCRIPT_NAME-$OS-$ARCH-$SCRIPT_MTIME"
+
+# Check if we have a cached binary and force rebuild is not enabled
+if [[ -x "$BINARY_CACHE" ]] && [[ "$FORCE_REBUILD" != "true" ]]; then
+    echo "Using cached binary: $BINARY_CACHE"
+    
+    # For Idris, we need special handling
+    if [[ "$LANG" == "Idris" ]]; then
+        # For Idris, we'll just execute the binary without exec to preserve environment
+        "$BINARY_CACHE" "$@"
+        exit $?
+    else
+        # For other languages, directly execute the binary
+        exec "$BINARY_CACHE" "$@"
+    fi
+fi
+
+# If we're forcing a rebuild, remove any existing cached binary
+if [[ "$FORCE_REBUILD" == "true" ]] && [[ -f "$BINARY_CACHE" ]]; then
+    echo "Force rebuild enabled, removing cached binary"
+    rm -f "$BINARY_CACHE"
+fi
+
+echo "No cached binary found. Compiling..."
+
+# Create a temporary directory for building
+TEMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
+# Copy the script to the temporary directory without the shebang line
+tail -n +2 "$SCRIPT_PATH" > "$TEMP_DIR/source"
+
+# Check if the script has a Nix header and remove it
+if grep -q "^# nix:" "$TEMP_DIR/source"; then
+    echo "Found Nix header, removing..."
+    # Find the line numbers of the Nix header block
+    START_LINE=$(grep -n "^# nix:" "$TEMP_DIR/source" | head -1 | cut -d: -f1)
+    END_LINE=$(grep -n "^# }$" "$TEMP_DIR/source" | head -1 | cut -d: -f1)
+    
+    if [[ -n "$START_LINE" && -n "$END_LINE" ]]; then
+        echo "Removed Nix header block from lines $START_LINE to $END_LINE"
+        sed -i "${START_LINE},${END_LINE}d" "$TEMP_DIR/source"
+    fi
+fi
+
+# Set the source path based on the language
+SOURCE_PATH="$TEMP_DIR/source"
+
+# Simple compilation based on language
+case "$LANG" in
+    C)
+        SOURCE_PATH="$TEMP_DIR/source.c"
+        mv "$TEMP_DIR/source" "$SOURCE_PATH"
+        echo "Compiling C code..."
+        
+        # Use nix-shell to provide the necessary dependencies
+        echo "Using nix-shell to compile with dependencies..."
+        nix-shell -p gcc zlib --run "gcc -O3 -Wall -Wextra $SOURCE_PATH -o $TEMP_DIR/binary -lz"
+        ;;
+    C++)
+        SOURCE_PATH="$TEMP_DIR/source.cpp"
+        mv "$TEMP_DIR/source" "$SOURCE_PATH"
+        echo "Compiling C++ code..."
+        nix-shell -p gcc boost --run "g++ -std=c++20 -O3 -Wall -Wextra $SOURCE_PATH -o $TEMP_DIR/binary"
+        ;;
+    Rust)
+        SOURCE_PATH="$TEMP_DIR/source.rs"
+        mv "$TEMP_DIR/source" "$SOURCE_PATH"
+        echo "Compiling Rust code..."
+        nix-shell -p rustc --run "rustc -C opt-level=3 $SOURCE_PATH -o $TEMP_DIR/binary"
+        ;;
+    D)
+        SOURCE_PATH="$TEMP_DIR/source.d"
+        mv "$TEMP_DIR/source" "$SOURCE_PATH"
+        echo "Compiling D code..."
+        nix-shell -p ldc --run "ldc2 -O3 -release -of=$TEMP_DIR/binary $SOURCE_PATH"
+        ;;
+    Nim)
+        SOURCE_PATH="$TEMP_DIR/source.nim"
+        mv "$TEMP_DIR/source" "$SOURCE_PATH"
+        echo "Compiling Nim code..."
+        nix-shell -p nim --run "nim compile --opt:speed --out:$TEMP_DIR/binary $SOURCE_PATH"
+        ;;
+    Zig)
+        SOURCE_PATH="$TEMP_DIR/source.zig"
+        mv "$TEMP_DIR/source" "$SOURCE_PATH"
+        echo "Compiling Zig code..."
+        nix-shell -p zig --run "zig build-exe -O ReleaseFast $SOURCE_PATH -femit-bin=$TEMP_DIR/binary"
+        ;;
+    Crystal)
+        SOURCE_PATH="$TEMP_DIR/source.cr"
+        mv "$TEMP_DIR/source" "$SOURCE_PATH"
+        echo "Compiling Crystal code..."
+        nix-shell -p crystal --run "crystal build --release --no-debug $SOURCE_PATH -o $TEMP_DIR/binary"
+        ;;
+    Idris)
+        # For Idris, we need to create a wrapper script that will execute the Idris code
+        # using the idris2 --exec flag
+        echo "Creating Idris wrapper script..."
+        
+        # Create a wrapper script that will execute the Idris code
+        cat > "$TEMP_DIR/binary" << 'EOF'
+#!/usr/bin/env bash
+# Wrapper script for Idris program
+
+# Get the original script path
+SCRIPT_PATH="SCRIPT_PATH_PLACEHOLDER"
+
+# Create a temporary directory for Idris execution
+TEMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
+# Copy the script to the temporary directory without the shebang and Nix header
+IDRIS_FILE="$TEMP_DIR/$(basename "$SCRIPT_PATH")"
+tail -n +2 "$SCRIPT_PATH" | grep -v "^# nix:" | grep -v "^#   " | grep -v "^# }" > "$IDRIS_FILE"
+
+# Create a dedicated build directory inside the temp directory
+BUILD_DIR="$TEMP_DIR/build"
+mkdir -p "$BUILD_DIR"
+
+# Store arguments in an array
+ARGS=("$@")
+
+# Execute the Idris program with build artifacts contained in the build directory
+# We use the --build-dir flag to specify where build artifacts should go
+cd "$TEMP_DIR"
+nix-shell -p idris2 --run "idris2 --build-dir $BUILD_DIR --output-dir $BUILD_DIR --exec main $IDRIS_FILE ${ARGS[*]}"
+
+# Exit with the same status code
+exit $?
+EOF
+
+        # Replace the placeholder with the actual script path
+        sed -i "s|SCRIPT_PATH_PLACEHOLDER|$SCRIPT_PATH|g" "$TEMP_DIR/binary"
+        
+        # Make the wrapper script executable
+        chmod +x "$TEMP_DIR/binary"
+        ;;
+    
+    Lean4)
+        # TODO
+        ;;
+    Elixir)
+        # TODO
+        ;;
+    *)
+        echo "Error: Unsupported language '$LANG'" >&2
+        exit 1
+        ;;
+esac
+
+# Make the binary executable
+chmod +x "$TEMP_DIR/binary"
+
+# Cache the binary
+cp "$TEMP_DIR/binary" "$BINARY_CACHE"
+chmod +x "$BINARY_CACHE"
+
+echo "Compilation successful. Binary cached at: $BINARY_CACHE"
+
+# Execute the binary
+if [[ "$LANG" == "Idris" ]]; then
+    echo "Executing Idris wrapper script..."
+    # Execute the Idris wrapper script
+    bash "$BINARY_CACHE" "$@"
+    exit $?
+else
+    # For other languages, directly execute the binary
+    exec "$BINARY_CACHE" "$@"
+fi
