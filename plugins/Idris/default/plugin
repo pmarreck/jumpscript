@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+
+usage() {
+	cat <<'USAGE'
+Usage: plugin meta <script>
+       plugin doctor
+       plugin help
+USAGE
+}
+
+meta() {
+	local script_path="${1:-}"
+	if [[ -z "${script_path}" ]]; then
+		echo "meta requires script path" >&2
+		exit 1
+	fi
+
+	local script_dir script_base artifact_rel
+	script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
+	script_base="$(basename "${script_path}")"
+	artifact_rel="js/${script_base%.*}.js"
+	if [[ "${artifact_rel}" == "js/.js" ]]; then
+		artifact_rel="js/artifact.js"
+	fi
+
+	local import_line import_module rel_path
+	local -a deps=()
+	while IFS= read -r import_line; do
+		if [[ "${import_line}" =~ ^[[:space:]]*import[[:space:]]+([A-Z][A-Za-z0-9_.]*) ]]; then
+			import_module="${BASH_REMATCH[1]}"
+			rel_path="${import_module//./\/}.idr"
+			if [[ -f "${script_dir}/${rel_path}" ]]; then
+				deps+=("${rel_path}")
+			fi
+		fi
+	done < <(tail -n +2 "${script_path}")
+
+	local deps_value=""
+	if (( ${#deps[@]} )); then
+		# ensure uniqueness while preserving order
+		local -A seen=()
+		local dep
+		for dep in "${deps[@]}"; do
+			if [[ -z "${seen[${dep}]:-}" ]]; then
+				seen["${dep}"]=1
+				deps_value+="${dep}:"
+			fi
+		done
+		deps_value="${deps_value%:}"
+	fi
+
+	cat <<META
+lang=Idris
+out_rel=${artifact_rel}
+build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.idr; if [[ -n "\$JUMPSCRIPT_DEPS" ]]; then IFS=: read -r -a deps <<< "\$JUMPSCRIPT_DEPS"; prefix="\$JUMPSCRIPT_SCRIPT_DIR/"; for dep in "\${deps[@]}"; do rel="\$dep"; if [[ "\$rel" == "\$prefix"* ]]; then rel="\${rel#\$prefix}"; fi; if [[ "\$rel" == "\$dep" ]]; then rel="\$(basename "\$dep")"; fi; mkdir -p "\$(dirname "\$rel")"; cp "\$dep" "\$rel"; done; unset IFS; fi; idris2 --codegen node --no-color --output "\$JUMPSCRIPT_ARTIFACT" source.idr'
+rebuild_mode=mtime
+exec_kind=text
+runtime_cmd=nix develop ${plugin_dir}#build --command node {{artifact}}
+deps=${deps_value}
+META
+}
+
+doctor() {
+	if ! command -v nix >/dev/null 2>&1; then
+		echo "status=missing-nix"
+		exit 1
+	fi
+	echo "status=ok"
+}
+
+case "${1:-}" in
+	meta)
+		shift
+		meta "$@"
+		;;
+	doctor)
+		shift
+		doctor "$@"
+		;;
+	help)
+		usage
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac

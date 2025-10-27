@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+tests=(
+	"tests/test_core_runner.sh"
+	"tests/test_integration_c.sh"
+	"tests/test_integration_moon.sh"
+	"tests/test_integration_wat.sh"
+	"tests/test_integration_cpp.sh"
+	"tests/test_integration_crystal.sh"
+	"tests/test_integration_d.sh"
+	"tests/test_integration_nim.sh"
+	"tests/test_integration_rust.sh"
+	"tests/test_integration_zig.sh"
+	"tests/test_integration_idris.sh"
+	"tests/test_integration_lean.sh"
+	"tests/test_direnv_envrc.sh"
+	"tests/test_shebang_roundtrip.sh"
+	"tests/test_cli_help.sh"
+	"tests/test_repo_clean.sh"
+	"tests/test_runner_absolute_path.sh"
+	"tests/test_user_plugin_precedence.sh"
+)
+
+for test_file in "${tests[@]}"; do
+	echo "Running ${test_file}..."
+	"${repo_root}/${test_file}"
+done

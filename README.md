@@ -1,6 +1,6 @@
 # JumpScript - Nix-Backed Compiled Script Runner
 
-JumpScript turns compiled languages into fast-launching scripts. It builds on first run (or when modified), caches the binary, and skips straight to execution thereafter. It uses Nix for reproducible builds and dependency management.
+JumpScript turns compiled languages into fast-launching scripts. It builds on first run (or when modified), caches the binary, and skips straight to execution thereafter. Nix provides reproducible toolchains for each language.
 
 ## Installation
 
@@ -9,11 +9,15 @@ JumpScript turns compiled languages into fast-launching scripts. It builds on fi
    ```bash
    git clone https://github.com/yourusername/jumpscript.git
    ```
-3. Add the `jumpscript` script to your PATH:
+3. Add the `jumpscript` script to your PATH. If you use [direnv](https://direnv.net/), allow the bundled `.envrc` to prepend the repository path automatically:
    ```bash
    cd jumpscript
+   direnv allow   # optional; keeps PATH scoped to this repo
+   ```
+   Otherwise, symlink the script anywhere on your PATH:
+   ```bash
    chmod +x jumpscript
-   ln -s $(pwd)/jumpscript ~/.local/bin/jumpscript  # or another directory in your PATH
+   ln -s "$(pwd)/jumpscript" ~/.local/bin/jumpscript
    ```
 
 ## Usage
@@ -21,7 +25,7 @@ JumpScript turns compiled languages into fast-launching scripts. It builds on fi
 Create a script with a shebang line specifying the language:
 
 ```c
-#!/usr/bin/env jumpscript -S C
+#!/usr/bin/env -S jumpscript C
 # nix: {
 #   buildInputs = [ pkgs.zlib ];
 #   pkgsBranch = "unstable";
@@ -43,14 +47,7 @@ chmod +x hello.c
 ./hello.c
 ```
 
-On first run, JumpScript will:
-1. Compile the script using the appropriate plugin
-2. Cache the binary in `~/.cache/jumpscript/`
-3. Execute the binary
-
-On subsequent runs, JumpScript will:
-1. Check if the script has been modified
-2. If not, execute the cached binary directly
+On the first run JumpScript compiles the script, stores the binary in the cache, and executes it. Subsequent runs skip straight to execution until the script or any tracked dependency changes.
 
 ## Nix Header
 
@@ -63,7 +60,7 @@ The `# nix:` header block is parsed as a Nix attrset and can contain:
 
 ## Supported Languages
 
-`jumpscript` currently supports the following languages:
+`jumpscript` currently ships plugins for:
 
 - C
 - C++
@@ -74,34 +71,29 @@ The `# nix:` header block is parsed as a Nix attrset and can contain:
 - Lean 4
 - Zig
 - Nim
-- Elixir (with daemon support for fast script launching)
+- Wat (WebAssembly Text)
+- MoonScript
+
+## CLI Reference
+
+```
+jumpscript run <Language[-Version]> <script> [args...]
+jumpscript --help
+jumpscript --about
+```
+
+- `--about` prints a one-line description of JumpScript’s purpose.
+- `--help` shows the currently effective cache root, plugin search paths, and the environment variables that override them (`JUMPSCRIPT_CACHE`, `JUMPSCRIPT_PLUGINS_DIR`, `JUMPSCRIPT_USER_PLUGINS`, plus the relevant XDG defaults).
+
+All scripts should use the shebang form `#!/usr/bin/env -S jumpscript <Language>`. The optional `-Version` suffix selects a non-default plugin if one is present.
+
+## Direnv Support
+
+The repository includes a `.envrc` that prepends the project directory to `PATH` so the local `jumpscript` executable is discovered automatically. If you use direnv, run `direnv allow` once per clone; otherwise the file has no effect.
 
 ## Adding New Languages
 
-To add support for a new language, create a plugin file in the `plugins/` directory:
-
-```nix
-{pkgs ? import <nixpkgs> {}}:
-
-{
-  lang = "YourLanguage";
-  fileExt = "ext";
-  preferStatic = true;
-  defaultBuildInputs = with pkgs; [
-    # List required packages here
-  ];
-  defaultNativeBuildInputs = with pkgs; [
-    pkg-config
-  ];
-  compileCommand = [
-    "compiler"
-    "sourcePath"
-    "-o"
-    "binaryPath"
-  ];
-  # Optional: runner = "#!/usr/bin/env interpreter";
-}
-```
+Each language is packaged as a plugin under `plugins/<Language>/<version>/plugin`. Plugins emit metadata describing their build command, dependencies, and runtime requirements. See existing plugins for concrete examples.
 
 ## License
 

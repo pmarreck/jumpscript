@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+	cat <<'USAGE'
+Usage: plugin meta <script>
+       plugin doctor
+       plugin help
+USAGE
+}
+
+meta() {
+	local script_path="${1:-}"
+	if [[ -z "${script_path}" ]]; then
+		echo "meta requires script path" >&2
+		exit 1
+	fi
+
+	local script_base artifact_rel
+	script_base="$(basename "${script_path}")"
+	artifact_rel="wasm/${script_base%.*}.wasm"
+	if [[ "${artifact_rel}" == "wasm/.wasm" ]]; then
+		artifact_rel="wasm/artifact.wasm"
+	fi
+
+	cat <<META
+lang=Wat
+out_rel=${artifact_rel}
+build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.wat && wat2wasm source.wat -o "\$JUMPSCRIPT_ARTIFACT"'
+rebuild_mode=mtime
+exec_kind=wasm
+runtime_cmd=nix develop ${plugin_dir}#build --command wazero run {{artifact}}
+META
+}
+
+doctor() {
+	if ! command -v nix >/dev/null 2>&1; then
+		echo "status=missing-nix"
+		exit 1
+	fi
+	echo "status=ok"
+}
+
+case "${1:-}" in
+	meta)
+		shift
+		meta "$@"
+		;;
+	doctor)
+		shift
+		doctor "$@"
+		;;
+	help)
+		usage
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac

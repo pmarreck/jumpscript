@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+	cat <<'USAGE'
+Usage: plugin meta <script>
+       plugin doctor
+       plugin help
+USAGE
+}
+
+meta() {
+	local script_path="${1:-}"
+	if [[ -z "${script_path}" ]]; then
+		echo "meta requires script path" >&2
+		exit 1
+	fi
+
+	local script_base artifact_rel
+	script_base="$(basename "${script_path}")"
+	artifact_rel="lua/${script_base%.*}.lua"
+	if [[ "${artifact_rel}" == "lua/.lua" ]]; then
+		artifact_rel="lua/artifact.lua"
+	fi
+
+	cat <<META
+lang=Moon
+out_rel=${artifact_rel}
+build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.moon && moonc source.moon && mv source.lua "\$JUMPSCRIPT_ARTIFACT"'
+rebuild_mode=mtime
+exec_kind=lua
+runtime_cmd=lua {{artifact}}
+META
+}
+
+doctor() {
+	if ! command -v nix >/dev/null 2>&1; then
+		echo "status=missing-nix"
+		exit 1
+	fi
+	echo "status=ok"
+}
+
+case "${1:-}" in
+	meta)
+		shift
+		meta "$@"
+		;;
+	doctor)
+		shift
+		doctor "$@"
+		;;
+	help)
+		usage
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac

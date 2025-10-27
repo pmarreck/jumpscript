@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+
+usage() {
+	cat <<'USAGE'
+Usage: plugin meta <script>
+       plugin doctor
+       plugin help
+USAGE
+}
+
+meta() {
+	local script_path="${1:-}"
+	if [[ -z "${script_path}" ]]; then
+		echo "meta requires script path" >&2
+		exit 1
+	fi
+
+	local script_base artifact_rel
+	script_base="$(basename "${script_path}")"
+	artifact_rel="bin/${script_base%.*}"
+	if [[ "${artifact_rel}" == "bin/" ]]; then
+		artifact_rel="bin/artifact"
+	fi
+
+	local include_line include_path
+	local -a deps=()
+	while IFS= read -r include_line; do
+		include_path="${include_line#include \"}"
+		include_path="${include_path%\"}"
+		if [[ -n "${include_path}" ]]; then
+			deps+=("${include_path}")
+		fi
+	done < <(tail -n +2 "${script_path}" | grep -oE 'include "[^"]+"' || true)
+
+	local deps_value=""
+	if (( ${#deps[@]} )); then
+		deps_value="$(printf '%s:' "${deps[@]}")"
+		deps_value="${deps_value%:}"
+	fi
+
+	local build_cmd
+	build_cmd="nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.nim; if [[ -n \"\$JUMPSCRIPT_DEPS\" ]]; then IFS=: read -r -a deps <<< \"\$JUMPSCRIPT_DEPS\"; for dep in \"\${deps[@]}\"; do base=\"\$(basename \"\$dep\")\"; cp \"\$dep\" \"\$base\"; done; unset IFS; fi; nim c --opt:speed --colors:off --verbosity:0 --hints:off --out:\"\$JUMPSCRIPT_ARTIFACT\" source.nim'"
+
+	cat <<META
+lang=Nim
+out_rel=${artifact_rel}
+build_cmd=${build_cmd}
+rebuild_mode=mtime
+exec_kind=bin
+deps=${deps_value}
+META
+}
+
+doctor() {
+	if ! command -v nix >/dev/null 2>&1; then
+		echo "status=missing-nix"
+		exit 1
+	fi
+	echo "status=ok"
+}
+
+case "${1:-}" in
+	meta)
+		shift
+		meta "$@"
+		;;
+	doctor)
+		shift
+		doctor "$@"
+		;;
+	help)
+		usage
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac

@@ -1,0 +1,8 @@
+ver=1.1
+depth=4
+
+hide=[
+	.claude
+	.git
+	.jj
+]

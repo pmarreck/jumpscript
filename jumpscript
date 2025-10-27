@@ -1,250 +1,377 @@
 #!/usr/bin/env bash
-# jumpscript_simple - A simplified version of jumpscript for testing
-# Author: pmarreck
-# License: MIT
+set -euo pipefail
 
-set -e
+base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+plugins_root="${JUMPSCRIPT_PLUGINS_DIR:-${base_dir}/plugins}"
+default_user_plugins_root="${XDG_DATA_HOME:-${HOME}/.local/share}/jumpscript/plugins"
+user_plugins_root="${JUMPSCRIPT_USER_PLUGINS:-${default_user_plugins_root}}"
 
-VERSION="0.1.0"
-CACHE_DIR="$HOME/.cache/jumpscript"
-PLUGIN_DIR="$(dirname "$(realpath "$0")")/plugins"
+summary="jumpscript: cached edit-run harness for compiled languages"
 
-# Ensure cache directory exists
-mkdir -p "$CACHE_DIR"
-
-# Print usage information
-usage() {
-    echo "Usage: jumpscript_simple [OPTIONS] LANG SCRIPT [ARGS...]"
-    echo ""
-    echo "Options:"
-    echo "  -h, --help      Show this help message and exit"
-    echo "  -v, --version   Show version information and exit"
-    echo ""
-    echo "Arguments:"
-    echo "  LANG            Language to use (C, C++, Rust, etc.)"
-    echo "  SCRIPT          Script file to execute"
-    echo "  ARGS...         Arguments to pass to the script"
-    echo ""
-    echo "jumpscript_simple is a simplified version of jumpscript for testing."
-    exit 0
+get_default_cache_root() {
+	local cache_base="${XDG_CACHE_HOME:-${HOME}/.cache}"
+	echo "${cache_base}/jumpscript-artifacts"
 }
 
-# Print version information
-version() {
-    echo "jumpscript_simple version $VERSION"
-    exit 0
+show_about() {
+	echo "${summary}"
+	exit 0
 }
 
-# Parse command-line options
-FORCE_REBUILD=false
+show_help() {
+	local default_cache_root current_cache_root current_user_plugins_root
+	default_cache_root="$(get_default_cache_root)"
+	current_cache_root="${JUMPSCRIPT_CACHE:-${default_cache_root}}"
+	current_user_plugins_root="${user_plugins_root}"
+	cat <<EOF
+Usage: jumpscript run <Language[-Version]> <script> [args...]
+
+${summary}
+
+Cache:
+  Default cache root: ${default_cache_root}
+  Current cache root: ${current_cache_root}
+  Cache overrides: JUMPSCRIPT_CACHE, XDG_CACHE_HOME
+
+Plugins:
+  Bundled plugins dir: ${plugins_root}
+  Plugins override: JUMPSCRIPT_PLUGINS_DIR
+
+User Plugins:
+  User plugins search root: ${current_user_plugins_root}
+  User plugins overrides: JUMPSCRIPT_USER_PLUGINS, XDG_DATA_HOME
+EOF
+	exit 0
+}
+
+command="${1:-}"
+
+die() {
+	echo "Error: $1" >&2
+	exit "${2:-1}"
+}
+
+get_permissions() {
+	local target="$1"
+	if perm=$(stat -c %a "${target}" 2>/dev/null); then
+		echo "${perm}"
+		return 0
+	fi
+	if perm=$(stat -f %Lp "${target}" 2>/dev/null); then
+		echo "${perm}"
+		return 0
+	fi
+	return 1
+}
+
+get_mtime() {
+	local target="$1"
+	if mtime=$(stat -c %Y "${target}" 2>/dev/null); then
+		echo "${mtime}"
+		return 0
+	fi
+	if mtime=$(stat -f %m "${target}" 2>/dev/null); then
+		echo "${mtime}"
+		return 0
+	fi
+	return 1
+}
+
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            usage
-            ;;
-        -v|--version)
-            version
-            ;;
-        --force-rebuild)
-            FORCE_REBUILD=true
-            ;;
-        *)
-            break
-            ;;
-    esac
-    shift
+	case "$1" in
+		-a|--about)
+			show_about
+			;;
+		-h|--help)
+			show_help
+			;;
+		--)
+			shift
+			break
+			;;
+		-*)
+			die "unsupported option '$1'"
+			;;
+		*)
+			break
+			;;
+	esac
 done
 
-# Check if we have enough arguments
-if [[ $# -lt 2 ]]; then
-    echo "Error: Both LANG and SCRIPT must be provided" >&2
-    usage
+command="${1:-}"
+
+if [[ -z "${command}" ]]; then
+	die "no command provided"
 fi
 
-# Get the language and script path
-LANG="$1"
-SCRIPT_PATH="$2"
-shift 2
-
-# Check if the script exists
-if [[ ! -f "$SCRIPT_PATH" ]]; then
-    echo "Error: Script '$SCRIPT_PATH' not found" >&2
-    exit 1
+if [[ "${command}" != "run" ]]; then
+	set -- run "$@"
+	command="run"
 fi
 
-# Get the absolute path of the script
-SCRIPT_PATH=$(realpath "$SCRIPT_PATH")
-SCRIPT_NAME=$(basename "$SCRIPT_PATH")
-SCRIPT_MTIME=$(stat -c %Y "$SCRIPT_PATH" 2>/dev/null || stat -f %m "$SCRIPT_PATH")
-ARCH=$(uname -m)
-OS=$(uname -s)
-BINARY_CACHE="$CACHE_DIR/$SCRIPT_NAME-$OS-$ARCH-$SCRIPT_MTIME"
-
-# Check if we have a cached binary and force rebuild is not enabled
-if [[ -x "$BINARY_CACHE" ]] && [[ "$FORCE_REBUILD" != "true" ]]; then
-    echo "Using cached binary: $BINARY_CACHE"
-    
-    # For Idris, we need special handling
-    if [[ "$LANG" == "Idris" ]]; then
-        # For Idris, we'll just execute the binary without exec to preserve environment
-        "$BINARY_CACHE" "$@"
-        exit $?
-    else
-        # For other languages, directly execute the binary
-        exec "$BINARY_CACHE" "$@"
-    fi
-fi
-
-# If we're forcing a rebuild, remove any existing cached binary
-if [[ "$FORCE_REBUILD" == "true" ]] && [[ -f "$BINARY_CACHE" ]]; then
-    echo "Force rebuild enabled, removing cached binary"
-    rm -f "$BINARY_CACHE"
-fi
-
-echo "No cached binary found. Compiling..."
-
-# Create a temporary directory for building
-TEMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TEMP_DIR"' EXIT
-
-# Copy the script to the temporary directory without the shebang line
-tail -n +2 "$SCRIPT_PATH" > "$TEMP_DIR/source"
-
-# Check if the script has a Nix header and remove it
-if grep -q "^# nix:" "$TEMP_DIR/source"; then
-    echo "Found Nix header, removing..."
-    # Find the line numbers of the Nix header block
-    START_LINE=$(grep -n "^# nix:" "$TEMP_DIR/source" | head -1 | cut -d: -f1)
-    END_LINE=$(grep -n "^# }$" "$TEMP_DIR/source" | head -1 | cut -d: -f1)
-    
-    if [[ -n "$START_LINE" && -n "$END_LINE" ]]; then
-        echo "Removed Nix header block from lines $START_LINE to $END_LINE"
-        sed -i "${START_LINE},${END_LINE}d" "$TEMP_DIR/source"
-    fi
-fi
-
-# Set the source path based on the language
-SOURCE_PATH="$TEMP_DIR/source"
-
-# Simple compilation based on language
-case "$LANG" in
-    C)
-        SOURCE_PATH="$TEMP_DIR/source.c"
-        mv "$TEMP_DIR/source" "$SOURCE_PATH"
-        echo "Compiling C code..."
-        
-        # Use nix-shell to provide the necessary dependencies
-        echo "Using nix-shell to compile with dependencies..."
-        nix-shell -p gcc zlib --run "gcc -O3 -Wall -Wextra $SOURCE_PATH -o $TEMP_DIR/binary -lz"
-        ;;
-    C++)
-        SOURCE_PATH="$TEMP_DIR/source.cpp"
-        mv "$TEMP_DIR/source" "$SOURCE_PATH"
-        echo "Compiling C++ code..."
-        nix-shell -p gcc boost --run "g++ -std=c++20 -O3 -Wall -Wextra $SOURCE_PATH -o $TEMP_DIR/binary"
-        ;;
-    Rust)
-        SOURCE_PATH="$TEMP_DIR/source.rs"
-        mv "$TEMP_DIR/source" "$SOURCE_PATH"
-        echo "Compiling Rust code..."
-        nix-shell -p rustc --run "rustc -C opt-level=3 $SOURCE_PATH -o $TEMP_DIR/binary"
-        ;;
-    D)
-        SOURCE_PATH="$TEMP_DIR/source.d"
-        mv "$TEMP_DIR/source" "$SOURCE_PATH"
-        echo "Compiling D code..."
-        nix-shell -p ldc --run "ldc2 -O3 -release -of=$TEMP_DIR/binary $SOURCE_PATH"
-        ;;
-    Nim)
-        SOURCE_PATH="$TEMP_DIR/source.nim"
-        mv "$TEMP_DIR/source" "$SOURCE_PATH"
-        echo "Compiling Nim code..."
-        nix-shell -p nim --run "nim compile --opt:speed --out:$TEMP_DIR/binary $SOURCE_PATH"
-        ;;
-    Zig)
-        SOURCE_PATH="$TEMP_DIR/source.zig"
-        mv "$TEMP_DIR/source" "$SOURCE_PATH"
-        echo "Compiling Zig code..."
-        nix-shell -p zig --run "zig build-exe -O ReleaseFast $SOURCE_PATH -femit-bin=$TEMP_DIR/binary"
-        ;;
-    Crystal)
-        SOURCE_PATH="$TEMP_DIR/source.cr"
-        mv "$TEMP_DIR/source" "$SOURCE_PATH"
-        echo "Compiling Crystal code..."
-        nix-shell -p crystal --run "crystal build --release --no-debug $SOURCE_PATH -o $TEMP_DIR/binary"
-        ;;
-    Idris)
-        # For Idris, we need to create a wrapper script that will execute the Idris code
-        # using the idris2 --exec flag
-        echo "Creating Idris wrapper script..."
-        
-        # Create a wrapper script that will execute the Idris code
-        cat > "$TEMP_DIR/binary" << 'EOF'
-#!/usr/bin/env bash
-# Wrapper script for Idris program
-
-# Get the original script path
-SCRIPT_PATH="SCRIPT_PATH_PLACEHOLDER"
-
-# Create a temporary directory for Idris execution
-TEMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TEMP_DIR"' EXIT
-
-# Copy the script to the temporary directory without the shebang and Nix header
-IDRIS_FILE="$TEMP_DIR/$(basename "$SCRIPT_PATH")"
-tail -n +2 "$SCRIPT_PATH" | grep -v "^# nix:" | grep -v "^#   " | grep -v "^# }" > "$IDRIS_FILE"
-
-# Create a dedicated build directory inside the temp directory
-BUILD_DIR="$TEMP_DIR/build"
-mkdir -p "$BUILD_DIR"
-
-# Store arguments in an array
-ARGS=("$@")
-
-# Execute the Idris program with build artifacts contained in the build directory
-# We use the --build-dir flag to specify where build artifacts should go
-cd "$TEMP_DIR"
-nix-shell -p idris2 --run "idris2 --build-dir $BUILD_DIR --output-dir $BUILD_DIR --exec main $IDRIS_FILE ${ARGS[*]}"
-
-# Exit with the same status code
-exit $?
-EOF
-
-        # Replace the placeholder with the actual script path
-        sed -i "s|SCRIPT_PATH_PLACEHOLDER|$SCRIPT_PATH|g" "$TEMP_DIR/binary"
-        
-        # Make the wrapper script executable
-        chmod +x "$TEMP_DIR/binary"
-        ;;
-    
-    Lean4)
-        # TODO
-        ;;
-    Elixir)
-        # TODO
-        ;;
-    *)
-        echo "Error: Unsupported language '$LANG'" >&2
-        exit 1
-        ;;
+case "${command}" in
+	run)
+		shift
+		;;
+	*)
+		die "unsupported command '${command}'"
+		;;
 esac
 
-# Make the binary executable
-chmod +x "$TEMP_DIR/binary"
+lang_token="${1:-}"
+[[ -n "${lang_token}" ]] || die "language token is required"
+shift
 
-# Cache the binary
-cp "$TEMP_DIR/binary" "$BINARY_CACHE"
-chmod +x "$BINARY_CACHE"
+script_path="${1:-}"
+[[ -n "${script_path}" ]] || die "script path is required"
 
-echo "Compilation successful. Binary cached at: $BINARY_CACHE"
-
-# Execute the binary
-if [[ "$LANG" == "Idris" ]]; then
-    echo "Executing Idris wrapper script..."
-    # Execute the Idris wrapper script
-    bash "$BINARY_CACHE" "$@"
-    exit $?
-else
-    # For other languages, directly execute the binary
-    exec "$BINARY_CACHE" "$@"
+if [[ ! -f "${script_path}" ]]; then
+	die "script '${script_path}' not found"
 fi
+
+shift
+script_args=("$@")
+
+if [[ "${lang_token}" == *-* ]]; then
+	lang="${lang_token%%-*}"
+	version="${lang_token#*-}"
+else
+	lang="${lang_token}"
+	version="default"
+fi
+
+plugin_dir=""
+search_roots=()
+
+if [[ -n "${user_plugins_root}" ]]; then
+	search_roots+=("${user_plugins_root}")
+fi
+search_roots+=("${plugins_root}")
+
+for root in "${search_roots[@]}"; do
+	[[ -n "${root}" ]] || continue
+	candidate="${root}/${lang}/${version}"
+	if [[ -d "${candidate}" ]]; then
+		plugin_dir="${candidate}"
+		break
+	fi
+done
+
+if [[ -z "${plugin_dir}" ]]; then
+	joined_paths="$(IFS=','; printf '%s' "${search_roots[*]}")"
+	die "plugin not found for language '${lang}' version '${version}' (searched: ${joined_paths})"
+fi
+
+plugin_exec="${plugin_dir}/plugin"
+if [[ ! -x "${plugin_exec}" ]]; then
+	die "plugin executable not found at ${plugin_exec}"
+fi
+
+set +e
+plugin_meta_output="$("${plugin_exec}" meta "${script_path}" 2> >(cat >&2))"
+plugin_meta_status=$?
+set -e
+
+if [[ "${plugin_meta_status}" -ne 0 ]]; then
+	die "plugin '${lang}' meta command failed with exit code ${plugin_meta_status}" "${plugin_meta_status}"
+fi
+
+declare -A plugin_meta=()
+while IFS='=' read -r key value; do
+	if [[ -z "${key}" ]]; then
+		continue
+	fi
+	plugin_meta["${key}"]="${value}"
+done <<< "${plugin_meta_output}"
+
+required_meta_fields=(out_rel build_cmd rebuild_mode exec_kind)
+for field in "${required_meta_fields[@]}"; do
+	if [[ -z "${plugin_meta[${field}]:-}" ]]; then
+		die "plugin '${lang}' meta output missing required field '${field}'"
+	fi
+done
+
+runtime_cmd="${plugin_meta[runtime_cmd]:-}"
+
+case "${plugin_meta[rebuild_mode]}" in
+	mtime)
+		;;
+	*)
+		die "plugin '${lang}' requested unsupported rebuild_mode '${plugin_meta[rebuild_mode]}'"
+		;;
+esac
+
+case "${plugin_meta[exec_kind]}" in
+	bin|lua|wasm|beam|text)
+		;;
+	*)
+		die "plugin '${lang}' reported unsupported exec_kind '${plugin_meta[exec_kind]}'"
+		;;
+esac
+
+default_cache_root="$(get_default_cache_root)"
+cache_root="${JUMPSCRIPT_CACHE:-${default_cache_root}}"
+if [[ -d "${cache_root}" ]]; then
+	existing_perm="$(get_permissions "${cache_root}")" || die "unable to determine permissions of '${cache_root}'"
+	if [[ "${existing_perm}" != "700" ]]; then
+		die "cache root '${cache_root}' has permissions ${existing_perm}; expected 700"
+	fi
+else
+	mkdir -p "${cache_root}"
+	chmod 700 "${cache_root}"
+fi
+
+ensure_secure_dir() {
+	local dir="$1"
+	local perm=""
+	if [[ -d "${dir}" ]]; then
+		perm="$(get_permissions "${dir}")" || die "unable to determine permissions of '${dir}'"
+		if [[ "${perm}" != "700" ]]; then
+			die "directory '${dir}' has permissions ${perm}; expected 700"
+		fi
+	else
+		mkdir -p "${dir}"
+		chmod 700 "${dir}"
+	fi
+}
+
+lang_dir="${cache_root}/${lang}"
+version_dir="${lang_dir}/${version}"
+
+ensure_secure_dir "${lang_dir}"
+ensure_secure_dir "${version_dir}"
+
+script_mtime="$(get_mtime "${script_path}")" || die "unable to determine mtime for '${script_path}'"
+script_basename="$(basename "${script_path}")"
+script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
+
+deps_string="${plugin_meta[deps]:-}"
+old_ifs="${IFS}"
+IFS=':' read -r -a dep_rel_paths <<< "${deps_string}"
+IFS="${old_ifs}"
+declare -a dep_abs_paths=()
+latest_mtime="${script_mtime}"
+freshest_path="${script_path}"
+
+for dep_rel in "${dep_rel_paths[@]}"; do
+	[[ -z "${dep_rel}" ]] && continue
+	if [[ "${dep_rel}" == /* ]]; then
+		dep_path="${dep_rel}"
+	else
+		dep_path="${script_dir}/${dep_rel}"
+	fi
+	if [[ ! -e "${dep_path}" ]]; then
+		die "dependency '${dep_rel}' for script '${script_path}' not found"
+	fi
+	dep_mtime="$(get_mtime "${dep_path}")" || die "unable to determine mtime for dependency '${dep_path}'"
+	dep_abs_paths+=("${dep_path}")
+	if (( dep_mtime > latest_mtime )); then
+		latest_mtime="${dep_mtime}"
+		freshest_path="${dep_path}"
+	fi
+done
+
+entry_key="${script_basename}-${latest_mtime}"
+entry_dir="${version_dir}/${entry_key}"
+
+ensure_secure_dir "${entry_dir}"
+
+artifact_rel="${plugin_meta[out_rel]}"
+if [[ "${artifact_rel}" == /* ]]; then
+	die "plugin '${lang}' out_rel '${artifact_rel}' escapes cache entry"
+fi
+
+old_ifs="${IFS}"
+IFS='/'
+read -ra artifact_segments <<< "${artifact_rel}"
+IFS="${old_ifs}"
+for segment in "${artifact_segments[@]}"; do
+	if [[ "${segment}" == ".." ]]; then
+		die "plugin '${lang}' out_rel '${artifact_rel}' escapes cache entry"
+	fi
+done
+
+artifact_path="${entry_dir}/${artifact_rel}"
+
+meta_file="${entry_dir}/meta.env"
+{
+	echo "out_rel=${plugin_meta[out_rel]}"
+	echo "build_cmd=${plugin_meta[build_cmd]}"
+	echo "rebuild_mode=${plugin_meta[rebuild_mode]}"
+	echo "exec_kind=${plugin_meta[exec_kind]}"
+	if [[ -n "${runtime_cmd}" ]]; then
+		echo "runtime_cmd=${runtime_cmd}"
+	fi
+	if [[ -n "${deps_string}" ]]; then
+		echo "deps=${deps_string}"
+	fi
+} > "${meta_file}"
+
+artifact_dir="$(dirname "${artifact_path}")"
+if [[ "${artifact_dir}" != "${entry_dir}" ]]; then
+	ensure_secure_dir "${artifact_dir}"
+fi
+
+deps_env=""
+if (( ${#dep_abs_paths[@]} )); then
+	deps_env="$(printf '%s:' "${dep_abs_paths[@]}")"
+	deps_env="${deps_env%:}"
+fi
+
+needs_build=1
+if [[ -f "${artifact_path}" ]]; then
+	artifact_mtime="$(get_mtime "${artifact_path}")" || artifact_mtime="0"
+	if [[ "${artifact_mtime}" == "${latest_mtime}" ]]; then
+		needs_build=0
+	fi
+fi
+
+if [[ "${needs_build}" -eq 1 ]]; then
+	build_cmd="${plugin_meta[build_cmd]}"
+	set +e
+	(
+		set -e
+		cd "${entry_dir}"
+		JUMPSCRIPT_ENTRY_DIR="${entry_dir}" \
+		JUMPSCRIPT_ARTIFACT="${artifact_path}" \
+		JUMPSCRIPT_SCRIPT="${script_path}" \
+		JUMPSCRIPT_OUT_REL="${artifact_rel}" \
+		JUMPSCRIPT_LANG="${lang}" \
+		JUMPSCRIPT_BUILD_CMD="${build_cmd}" \
+		JUMPSCRIPT_SCRIPT_DIR="${script_dir}" \
+		JUMPSCRIPT_DEPS="${deps_env}" \
+		bash --noprofile --norc -lc "${build_cmd}"
+	)
+	build_status=$?
+	set -e
+	if [[ "${build_status}" -ne 0 ]]; then
+		die "plugin '${lang}' build command failed with exit code ${build_status}" "${build_status}"
+	fi
+
+	if [[ ! -f "${artifact_path}" ]]; then
+		die "plugin '${lang}' build command did not produce artifact '${artifact_rel}'"
+	fi
+
+	touch -r "${freshest_path}" "${artifact_path}"
+fi
+
+case "${plugin_meta[exec_kind]}" in
+	bin)
+		if [[ ! -x "${artifact_path}" ]]; then
+			die "artifact '${artifact_rel}' is not executable"
+		fi
+		exec "${artifact_path}" "${script_args[@]}"
+		;;
+	lua|wasm|beam|text)
+		if [[ -z "${runtime_cmd}" ]]; then
+			die "plugin '${lang}' exec_kind '${plugin_meta[exec_kind]}' requires runtime_cmd"
+		fi
+		runtime_resolved="${runtime_cmd//\{\{artifact\}\}/${artifact_path}}"
+		runtime_resolved="${runtime_resolved//\{\{script\}\}/${script_path}}"
+		read -r -a runtime_parts <<< "${runtime_resolved}"
+		exec "${runtime_parts[@]}" "${script_args[@]}"
+		;;
+	*)
+		die "exec_kind '${plugin_meta[exec_kind]}' execution not implemented"
+		;;
+esac

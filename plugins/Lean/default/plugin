@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+
+usage() {
+	cat <<'USAGE'
+Usage: plugin meta <script>
+       plugin doctor
+       plugin help
+USAGE
+}
+
+meta() {
+	local script_path="${1:-}"
+	if [[ -z "${script_path}" ]]; then
+		echo "meta requires script path" >&2
+		exit 1
+	fi
+
+	local script_base artifact_rel
+	script_base="$(basename "${script_path}")"
+	artifact_rel="bin/${script_base%.*}"
+	if [[ "${artifact_rel}" == "bin/" ]]; then
+		artifact_rel="bin/artifact"
+	fi
+
+	local build_cmd
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; pkg=$(basename "$JUMPSCRIPT_SCRIPT" .lean); printf "%s\n" "import Lake" "open Lake DSL" "" "package __PKG__ where" "" "@[default_target]" "lean_exe __PKG__ where" "  root := \`Main" > lakefile.lean; sed -i "s/__PKG__/$pkg/g" lakefile.lean; echo "leanprover/lean4:stable" > lean-toolchain; tail -n +2 "$JUMPSCRIPT_SCRIPT" > Main.lean; lake build "$pkg"; cp ".lake/build/bin/$pkg" "$JUMPSCRIPT_ARTIFACT"; chmod +x "$JUMPSCRIPT_ARTIFACT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
+
+	cat <<META
+lang=Lean
+out_rel=${artifact_rel}
+build_cmd=${build_cmd}
+rebuild_mode=mtime
+exec_kind=bin
+META
+}
+doctor() {
+	if ! command -v nix >/dev/null 2>&1; then
+		echo "status=missing-nix"
+		exit 1
+	fi
+	echo "status=ok"
+}
+
+case "${1:-}" in
+	meta)
+		shift
+		meta "$@"
+		;;
+	doctor)
+		shift
+		doctor "$@"
+		;;
+	help)
+		usage
+		;;
+	*)
+		usage >&2
+		exit 1
+		;;
+esac
