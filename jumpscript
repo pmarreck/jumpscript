@@ -129,6 +129,10 @@ if [[ ! -f "${script_path}" ]]; then
 	die "script '${script_path}' not found"
 fi
 
+if [[ "${script_path}" != /* ]]; then
+	script_path="$(cd "$(dirname "${script_path}")" && pwd)/$(basename "${script_path}")"
+fi
+
 shift
 script_args=("$@")
 

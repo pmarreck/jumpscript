@@ -41,13 +41,6 @@ exit 122
 EOF_STUB
 	chmod +x "${fake_tools}/wat2wasm"
 
-	cat > "${fake_tools}/wazero" <<'EOF_STUB2'
-#!/usr/bin/env bash
-echo "fake wazero invoked" >&2
-exit 123
-EOF_STUB2
-	chmod +x "${fake_tools}/wazero"
-
 	output="$(
 		PATH="${fake_tools}:${nix_dir}:/bin" \
 		JUMPSCRIPT_CACHE="${cache_root}" \

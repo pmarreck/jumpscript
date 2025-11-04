@@ -25,13 +25,18 @@ meta() {
 		artifact_rel="wasm/artifact.wasm"
 	fi
 
+	local current_system wazero_store wazero_bin
+	current_system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
+	wazero_store="$(nix eval --raw --impure "${plugin_dir}#packages.${current_system}.wazero")"
+	wazero_bin="${wazero_store}/bin/wazero"
+
 	cat <<META
 lang=Wat
 out_rel=${artifact_rel}
-build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.wat && wat2wasm source.wat -o "\$JUMPSCRIPT_ARTIFACT"'
+build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc "set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.wat; wat2wasm source.wat -o \"\$JUMPSCRIPT_ARTIFACT\""
 rebuild_mode=mtime
 exec_kind=wasm
-runtime_cmd=nix develop ${plugin_dir}#build --command wazero run {{artifact}}
+runtime_cmd=${wazero_bin} run {{artifact}}
 META
 }
 
