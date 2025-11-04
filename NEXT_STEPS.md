@@ -20,3 +20,9 @@
 
 4. **Elixir Daemon (Future)**
 	- Capture design requirements for BEAM daemon lifecycle (`jumpscript elixir start|stop|status`), sockets, caching.
+
+5. **Nix Env Delta Caching**
+	- Use `nix print-dev-env` (or equivalent diff) to record only the environment variables the devshell modifies during the initial build, store them alongside each cache entry, and replay them on subsequent runs to avoid spawning `nix develop` when artifacts are warm. Handle invalidation gracefully if the cached runner path disappears or the environment changes.
+
+6. **Host-runtime Metadata**
+	- Generalize the Wat optimization so every plugin can embed resolved runtime binaries (or their absolute paths) into the cache entry, eliminating fresh Nix shells for hot executions.
