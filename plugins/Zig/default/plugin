@@ -18,19 +18,72 @@ meta() {
 		exit 1
 	fi
 
-	local script_base artifact_rel
+	local script_dir script_base artifact_rel
+	script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
 	script_base="$(basename "${script_path}")"
 	artifact_rel="bin/${script_base%.*}"
 	if [[ "${artifact_rel}" == "bin/" ]]; then
 		artifact_rel="bin/artifact"
 	fi
 
+	local -a deps=()
+	declare -A seen=()
+	while IFS= read -r import_call; do
+		local import_path rel
+		import_path="${import_call#@import(\"}"
+		import_path="${import_path%\")}"
+
+		local -a candidates=()
+		if [[ "${import_path}" == /* ]]; then
+			candidates+=("${import_path}")
+		else
+			candidates+=("${script_dir}/${import_path}")
+		fi
+		if [[ "${import_path}" != *.zig ]]; then
+			if [[ "${import_path}" == /* ]]; then
+				candidates+=("${import_path}.zig")
+			else
+				candidates+=("${script_dir}/${import_path}.zig")
+			fi
+		fi
+
+		local candidate
+		for candidate in "${candidates[@]}"; do
+			if [[ -f "${candidate}" ]]; then
+				if [[ "${candidate}" == "${script_dir}/"* ]]; then
+					rel="${candidate#${script_dir}/}"
+				else
+					rel="$(basename "${candidate}")"
+				fi
+				if [[ -z "${seen[$rel]+x}" ]]; then
+					deps+=("${rel}")
+					seen["$rel"]=1
+				fi
+				break
+			fi
+		done
+	done < <(tail -n +2 "${script_path}" | grep -oE '@import\("[^"]+"\)' || true)
+
+	local deps_value=""
+	if (( ${#deps[@]} )); then
+		deps_value="$(printf '%s:' "${deps[@]}")"
+		deps_value="${deps_value%:}"
+	fi
+
+	local build_cmd
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; script_dir="$(dirname "$JUMPSCRIPT_SCRIPT")"; tmp="$(mktemp "$script_dir/.jumpscript-$$-XXXXXX.zig")"; cleanup() { rm -f "$tmp"; }; trap cleanup EXIT; tail -n +2 "$JUMPSCRIPT_SCRIPT" > "$tmp"; zig build-exe "$tmp" -O ReleaseFast -fstrip -femit-bin="$JUMPSCRIPT_ARTIFACT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
+
 	cat <<META
 lang=Zig
 out_rel=${artifact_rel}
-build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.zig && zig build-exe source.zig -O ReleaseFast -fstrip -femit-bin="\$JUMPSCRIPT_ARTIFACT"'
+build_cmd=${build_cmd}
 rebuild_mode=mtime
 exec_kind=bin
+deps=${deps_value}
 META
 }
 

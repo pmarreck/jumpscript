@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
 	cat <<'USAGE'
@@ -25,10 +25,17 @@ meta() {
 		artifact_rel="bin/artifact"
 	fi
 
+	local build_cmd
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; script_dir="$(dirname "$JUMPSCRIPT_SCRIPT")"; tail -n +2 "$JUMPSCRIPT_SCRIPT" | g++ -std=c++20 -O2 -xc++ -iquote "$script_dir" - -o "$JUMPSCRIPT_ARTIFACT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
+
 	cat <<META
 lang=C++
 out_rel=${artifact_rel}
-build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.cpp && g++ -std=c++20 -O2 source.cpp -o "\$JUMPSCRIPT_ARTIFACT"'
+build_cmd=${build_cmd}
 rebuild_mode=mtime
 exec_kind=bin
 META

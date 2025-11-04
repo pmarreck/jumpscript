@@ -18,19 +18,107 @@ meta() {
 		exit 1
 	fi
 
-	local script_base artifact_rel
+	local script_dir script_base artifact_rel
+	script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
 	script_base="$(basename "${script_path}")"
 	artifact_rel="bin/${script_base%.*}"
 	if [[ "${artifact_rel}" == "bin/" ]]; then
 		artifact_rel="bin/artifact"
 	fi
 
-	local build_cmd
-	build_cmd=$(cat <<'CMD'
-nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; pkg=$(basename "$JUMPSCRIPT_SCRIPT" .lean); printf "%s\n" "import Lake" "open Lake DSL" "" "package __PKG__ where" "" "@[default_target]" "lean_exe __PKG__ where" "  root := \`Main" > lakefile.lean; sed -i "s/__PKG__/$pkg/g" lakefile.lean; echo "leanprover/lean4:stable" > lean-toolchain; tail -n +2 "$JUMPSCRIPT_SCRIPT" > Main.lean; lake build "$pkg"; cp ".lake/build/bin/$pkg" "$JUMPSCRIPT_ARTIFACT"; chmod +x "$JUMPSCRIPT_ARTIFACT"'
-CMD
+	local line module module_path
+	local -a deps=()
+	while IFS= read -r line; do
+		line="${line#${line%%[![:space:]]*}}"
+		[[ "${line}" != import\ * ]] && continue
+		module="${line#import }"
+		module="${module%%--*}"
+		module="${module%% *}"
+		module="$(printf "%s" "${module}" | sed 's/[[:space:]]*$//')"
+		[[ -z "${module}" ]] && continue
+		if [[ "${module:0:1}" == "\"" ]]; then
+			module="${module%\"}"
+			module="${module#\"}"
+			if [[ "${module}" == ./* ]]; then
+				module_path="${module#./}"
+			else
+				module_path="${module}"
+			fi
+			[[ "${module_path}" == *.lean ]] || module_path="${module_path}.lean"
+		else
+			module_path="${module//./\//}.lean"
+		fi
+		if [[ -f "${script_dir}/${module_path}" ]]; then
+			deps+=("${module_path}")
+		fi
+	done < <(tail -n +2 "${script_path}")
+
+	local deps_value=""
+	if (( ${#deps[@]} )); then
+		deps_value="$(printf '%s:' "${deps[@]}")"
+		deps_value="${deps_value%:}"
+	fi
+
+	local inner_script
+	inner_script=$(cat <<'IN'
+set -e
+pkg=$(basename "$JUMPSCRIPT_SCRIPT" .lean)
+work_dir=$(mktemp -d "${TMPDIR:-/tmp}/jumpscript-lean-${PPID}-XXXXXX")
+cleanup() {
+  rm -rf "$work_dir"
+}
+trap cleanup EXIT
+cat <<'LAKE' > "$work_dir/lakefile.lean"
+import Lake
+open Lake DSL
+
+package __PKG__ where
+
+@[default_target]
+lean_exe __PKG__ where
+  root := `Main
+LAKE
+sed -i "s/__PKG__/$pkg/g" "$work_dir/lakefile.lean"
+echo "leanprover/lean4:stable" > "$work_dir/lean-toolchain"
+tail -n +2 "$JUMPSCRIPT_SCRIPT" > "$work_dir/Main.lean"
+if [[ -n "$JUMPSCRIPT_DEPS" ]]; then
+  IFS=: read -r -a deps <<< "$JUMPSCRIPT_DEPS"
+  prefix="$JUMPSCRIPT_SCRIPT_DIR/"
+  declare -A seen_modules=()
+  for dep in "${deps[@]}"; do
+    rel="$dep"
+    if [[ "$rel" == "$prefix"* ]]; then
+      rel="${rel#$prefix}"
+    fi
+    if [[ "$rel" == "$dep" ]]; then
+      rel="$(basename "$dep")"
+    fi
+    if [[ "$rel" == *.lean ]]; then
+      module="${rel%.lean}"
+      module="${module//\//.}"
+      if [[ -z "${seen_modules[$module]+x}" ]]; then
+        printf '\nlean_lib %s where\n' "$module" >> "$work_dir/lakefile.lean"
+        seen_modules[$module]=1
+      fi
+    fi
+    target="$work_dir/$rel"
+    mkdir -p "$(dirname "$target")"
+    cp "$dep" "$target"
+  done
+  unset IFS
+fi
+export LEAN_PATH="$work_dir${LEAN_PATH:+:${LEAN_PATH}}"
+export LAKE_LOG_LEVEL=error
+cd "$work_dir"
+lake build "$pkg" >/dev/null 2>&1
+cp ".lake/build/bin/$pkg" "$JUMPSCRIPT_ARTIFACT"
+chmod +x "$JUMPSCRIPT_ARTIFACT"
+IN
 )
-	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
+
+	local build_cmd
+	build_cmd=$(printf 'nix develop %s#build --command bash --noprofile --norc -lc %q' \
+		"${plugin_dir}" "${inner_script}")
 
 	cat <<META
 lang=Lean
@@ -38,8 +126,10 @@ out_rel=${artifact_rel}
 build_cmd=${build_cmd}
 rebuild_mode=mtime
 exec_kind=bin
+deps=${deps_value}
 META
 }
+
 doctor() {
 	if ! command -v nix >/dev/null 2>&1; then
 		echo "status=missing-nix"

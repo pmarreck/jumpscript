@@ -34,9 +34,9 @@ meta() {
 			echo "wat plugin requires 'wat2wasm' on PATH when --no-build-deps is set" >&2
 			exit 1
 		fi
-		build_cmd='set -e; tail -n +2 "$JUMPSCRIPT_SCRIPT" > source.wat; wat2wasm source.wat -o "$JUMPSCRIPT_ARTIFACT"'
+		build_cmd='set -e; tail -n +2 "$JUMPSCRIPT_SCRIPT" | wat2wasm -o "$JUMPSCRIPT_ARTIFACT" -'
 	else
-		build_cmd="nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.wat; wat2wasm source.wat -o \"\$JUMPSCRIPT_ARTIFACT\"'"
+		build_cmd="nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" | wat2wasm -o \"\$JUMPSCRIPT_ARTIFACT\" -'"
 	fi
 
 	local runtime_cmd

@@ -15,6 +15,10 @@
 | `tests/fixtures/hello_helper.rs` | Rust helper module paired with `hello_with_module.rs`. | Codex (2025-10-29) |
 | `tests/fixtures/hello_helper.idr` | Idris helper module consumed by import fixture. | Codex (2025-11-04) |
 | `tests/fixtures/hello_with_import.idr` | Idris fixture covering import dependency rebuilds. | Codex (2025-11-04) |
+| `tests/fixtures/hello_with_import.zig` | Zig fixture verifying module import dependency tracking. | Codex (2025-11-05) |
+| `tests/fixtures/hello_helper.zig` | Zig helper module paired with `hello_with_import.zig`. | Codex (2025-11-05) |
+| `tests/fixtures/hello_with_import.d` | D fixture exercising module import cache invalidation. | Codex (2025-11-05) |
+| `tests/fixtures/hello_helper.d` | D helper module consumed by the D import fixture. | Codex (2025-11-05) |
 | `tests/test_integration_moon.sh` | Integration test for the MoonScript plugin. | Codex (2025-10-28) |
 | `tests/test_integration_wat.sh` | Integration test for the WAT plugin. | Codex (2025-10-28) |
 | `tests/test_integration_cpp.sh` | Integration test for the C++ plugin. | Codex (2025-10-28) |

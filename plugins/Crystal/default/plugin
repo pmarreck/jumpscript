@@ -33,7 +33,7 @@ meta() {
 		if [[ "${require_path}" != "${require_line}" ]]; then
 			deps+=("${require_path}.cr")
 		fi
-	done < <(tail -n +2 "${script_path}" | grep -oE 'require "\./[^\"]+"' || true)
+	done < <(tail -n +2 "${script_path}" | grep -oE 'require "\./[^"]+"' || true)
 
 	local deps_value=""
 	if (( ${#deps[@]} )); then
@@ -42,7 +42,11 @@ meta() {
 	fi
 
 	local build_cmd
-	build_cmd="nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.cr; if [[ -n \"\$JUMPSCRIPT_DEPS\" ]]; then IFS=: read -r -a deps <<< \"\$JUMPSCRIPT_DEPS\"; for dep in \"\${deps[@]}\"; do base=\"\$(basename \"\$dep\")\"; cp \"\$dep\" \"\$base\"; done; unset IFS; fi; crystal build source.cr --release --no-color -o \"\$JUMPSCRIPT_ARTIFACT\"'"
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; crystal build "$JUMPSCRIPT_SCRIPT" --release --no-color -o "$JUMPSCRIPT_ARTIFACT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
 
 	cat <<META
 lang=Crystal

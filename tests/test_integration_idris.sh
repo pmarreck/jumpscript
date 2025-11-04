@@ -56,6 +56,12 @@ FAKE
 		printf "%s\n" "${output}" >&2
 		exit 1
 	fi
+
+	meta_output="$("${repo_root}/plugins/Idris/default/plugin" meta "${script_path}")"
+	if grep -q 'source.idr' <<<"${meta_output}"; then
+		echo "Idris plugin build command should avoid staging source.idr" >&2
+		exit 1
+	fi
 }
 
 run_idris_fixture
@@ -94,13 +100,8 @@ message : String
 message = "Idris import v2"
 EOF
 
-	python3 - <<PY
-import os
-import time
-path = r"${helper_path}"
-now = time.time()
-os.utime(path, (now + 5, now + 5))
-PY
+	future_epoch="$(($(date +%s) + 5))"
+	touch -m -d "@${future_epoch}" "${helper_path}"
 
 	second_output="$(
 		JUMPSCRIPT_CACHE="${cache_root}" \
@@ -110,6 +111,12 @@ PY
 
 	if [[ "${second_output}" != *"Idris import v2"* ]]; then
 		printf "Expected second run output to contain 'Idris import v2'\nOutput:\n%s\n" "${second_output}" >&2
+		exit 1
+	fi
+
+	if compgen -G "${work_dir}/.jumpscript-" >/dev/null 2>&1; then
+		echo "Temporary Idris staging files were not cleaned up" >&2
+		compgen -G "${work_dir}/.jumpscript-" >&2 || true
 		exit 1
 	fi
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
 	cat <<'USAGE'
@@ -18,19 +18,98 @@ meta() {
 		exit 1
 	fi
 
-	local script_base artifact_rel
+	local script_dir script_base artifact_rel
+	script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
 	script_base="$(basename "${script_path}")"
 	artifact_rel="bin/${script_base%.*}"
 	if [[ "${artifact_rel}" == "bin/" ]]; then
 		artifact_rel="bin/artifact"
 	fi
 
+	local -a dep_rel=()
+	declare -A seen=()
+
+	while IFS= read -r line; do
+		line="${line%%//*}"
+		line="${line%%//*/}"
+		line="${line%%;*}"
+		line="${line#${line%%[![:space:]]*}}"
+
+		local matched=1
+		while (( matched )); do
+			matched=0
+			for qualifier in public private protected export static; do
+				if [[ "${line}" == ${qualifier}\ * ]]; then
+					line="${line#${qualifier}}"
+					line="${line#${line%%[![:space:]]*}}"
+					matched=1
+					break
+				fi
+			done
+		done
+
+		if [[ "${line}" != import\ * ]]; then
+			continue
+		fi
+
+		line="${line#import }"
+		line="${line%${line##*[![:space:]]}}"
+
+		local old_ifs="${IFS}"
+		IFS=','
+		read -r -a modules <<< "${line}"
+		IFS="${old_ifs}"
+
+		local module
+		for module in "${modules[@]}"; do
+			module="${module#${module%%[![:space:]]*}}"
+			module="${module%${module##*[![:space:]]}}"
+			[[ -z "${module}" ]] && continue
+
+			local module_path="${module//./\/}"
+			local -a candidates=(
+				"${script_dir}/${module_path}.d"
+				"${script_dir}/${module_path}/package.d"
+			)
+
+			local candidate rel
+			for candidate in "${candidates[@]}"; do
+				if [[ -f "${candidate}" ]]; then
+					if [[ "${candidate}" == "${script_dir}/"* ]]; then
+						rel="${candidate#${script_dir}/}"
+					else
+						rel="$(basename "${candidate}")"
+					fi
+					if [[ -z "${seen[${rel}]+x}" ]]; then
+						dep_rel+=("${rel}")
+						seen["${rel}"]=1
+					fi
+					break
+				fi
+			done
+		done
+	done < "${script_path}"
+
+	local deps_value=""
+	if (( ${#dep_rel[@]} )); then
+		deps_value="$(printf '%s:' "${dep_rel[@]}")"
+		deps_value="${deps_value%:}"
+	fi
+
+	local build_cmd
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; script_dir="$(dirname "$JUMPSCRIPT_SCRIPT")"; args=("$JUMPSCRIPT_SCRIPT"); if [[ -n "$JUMPSCRIPT_DEPS" ]]; then IFS=: read -r -a deps <<< "$JUMPSCRIPT_DEPS"; args+=("${deps[@]}"); unset IFS; fi; ldc2 -O3 "${args[@]}" -I "$script_dir" -of "$JUMPSCRIPT_ARTIFACT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
+
 	cat <<META
 lang=D
 out_rel=${artifact_rel}
-build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.d && ldc2 -O3 source.d -of "\$JUMPSCRIPT_ARTIFACT"'
+build_cmd=${build_cmd}
 rebuild_mode=mtime
 exec_kind=bin
+deps=${deps_value}
 META
 }
 

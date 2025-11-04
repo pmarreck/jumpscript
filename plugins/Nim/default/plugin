@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
 	cat <<'USAGE'
@@ -42,7 +42,11 @@ meta() {
 	fi
 
 	local build_cmd
-	build_cmd="nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.nim; if [[ -n \"\$JUMPSCRIPT_DEPS\" ]]; then IFS=: read -r -a deps <<< \"\$JUMPSCRIPT_DEPS\"; for dep in \"\${deps[@]}\"; do base=\"\$(basename \"\$dep\")\"; cp \"\$dep\" \"\$base\"; done; unset IFS; fi; nim c --opt:speed --colors:off --verbosity:0 --hints:off --out:\"\$JUMPSCRIPT_ARTIFACT\" source.nim'"
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; nim c --opt:speed --colors:off --verbosity:0 --hints:off --out:"$JUMPSCRIPT_ARTIFACT" "$JUMPSCRIPT_SCRIPT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
 
 	cat <<META
 lang=Nim

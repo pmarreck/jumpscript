@@ -58,6 +58,18 @@ EOF
 		printf "%s\n" "${output}" >&2
 		exit 1
 	fi
+
+	meta_output="$("${repo_root}/plugins/Moon/default/plugin" meta "${script_path}")"
+	if grep -q 'source.moon' <<<"${meta_output}"; then
+		echo "Moon plugin build command should avoid staging source.moon" >&2
+		exit 1
+	fi
+
+	if compgen -G "${script_dir}/.jumpscript-" >/dev/null 2>&1; then
+		echo "Temporary Moon staging files were not cleaned up" >&2
+		compgen -G "${script_dir}/.jumpscript-" >&2 || true
+		exit 1
+	fi
 }
 
 test_moonscript_roundtrip

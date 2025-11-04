@@ -53,6 +53,12 @@ EOF_STUB
 		exit 1
 	fi
 
+	meta_output="$("${repo_root}/plugins/Wat/default/plugin" meta "${script_path}")"
+	if grep -q 'source.wat' <<<"${meta_output}"; then
+		echo "Wat plugin build command should avoid staging source.wat" >&2
+		exit 1
+	fi
+
 	cat > "${fake_tools}/wat2wasm" <<'EOF_STUB_FAIL'
 #!/usr/bin/env bash
 echo "wat2wasm should not rerun" >&2

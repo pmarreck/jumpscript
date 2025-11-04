@@ -56,6 +56,12 @@ FAKE
 		printf "%s\n" "${output}" >&2
 		exit 1
 	fi
+
+	meta_output="$("${repo_root}/plugins/C++/default/plugin" meta "${script_path}")"
+	if grep -q '> source.cpp' <<<"${meta_output}"; then
+		echo "C++ plugin build command should avoid staging source.cpp" >&2
+		exit 1
+	fi
 }
 
 run_cpp_fixture

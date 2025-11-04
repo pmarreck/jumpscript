@@ -56,6 +56,12 @@ FAKE
 		printf "%s\n" "${output}" >&2
 		exit 1
 	fi
+
+	meta_output="$("${repo_root}/plugins/Nim/default/plugin" meta "${script_path}")"
+	if grep -q '> source.nim' <<<"${meta_output}"; then
+		echo "Nim plugin build command should avoid staging source.nim" >&2
+		exit 1
+	fi
 }
 
 run_nim_fixture
@@ -80,20 +86,15 @@ test_nim_rebuilds_when_include_changes() {
 		exit 1
 	fi
 
-	cat > "${helper_path}" <<'EOF'
+cat > "${helper_path}" <<'EOF'
 # Nim helper module used for include rebuild coverage
 
 proc helperMessage(): string =
   "Nim include v2"
 EOF
 
-	python3 - <<PY
-import os
-import time
-path = r"${helper_path}"
-now = time.time()
-os.utime(path, (now + 5, now + 5))
-PY
+	future_epoch="$(($(date +%s) + 5))"
+	touch -m -d "@${future_epoch}" "${helper_path}"
 
 	second_output="$(
 		JUMPSCRIPT_CACHE="${cache_root}" \

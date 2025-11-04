@@ -56,6 +56,12 @@ FAKE
 		printf "%s\n" "${output}" >&2
 		exit 1
 	fi
+
+	meta_output="$("${repo_root}/plugins/Crystal/default/plugin" meta "${script_path}")"
+	if grep -q '> source.cr' <<<"${meta_output}"; then
+		echo "Crystal plugin build command should avoid staging source.cr" >&2
+		exit 1
+	fi
 }
 
 run_crystal_fixture
@@ -97,13 +103,8 @@ module HelloHelper
 end
 EOF
 
-	python3 - <<PY
-import os
-import time
-path = r"${helper_path}"
-now = time.time()
-os.utime(path, (now + 5, now + 5))
-PY
+	future_epoch="$(($(date +%s) + 5))"
+	touch -m -d "@${future_epoch}" "${helper_path}"
 
 	second_output="$(
 		JUMPSCRIPT_CACHE="${cache_root}" \

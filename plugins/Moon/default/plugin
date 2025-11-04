@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
 
 usage() {
 	cat <<'USAGE'
@@ -25,10 +25,17 @@ meta() {
 		artifact_rel="lua/artifact.lua"
 	fi
 
+	local build_cmd
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; script_dir="$(dirname "$JUMPSCRIPT_SCRIPT")"; tmp="$(mktemp "$script_dir/.jumpscript-$$-XXXXXX.moon")"; cleanup() { rm -f "$tmp" "${tmp%.moon}.lua"; }; trap cleanup EXIT; tail -n +2 "$JUMPSCRIPT_SCRIPT" > "$tmp"; moonc "$tmp"; mv "${tmp%.moon}.lua" "$JUMPSCRIPT_ARTIFACT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
+
 	cat <<META
 lang=Moon
 out_rel=${artifact_rel}
-build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'tail -n +2 "\$JUMPSCRIPT_SCRIPT" > source.moon && moonc source.moon && mv source.lua "\$JUMPSCRIPT_ARTIFACT"'
+build_cmd=${build_cmd}
 rebuild_mode=mtime
 exec_kind=lua
 runtime_cmd=lua {{artifact}}

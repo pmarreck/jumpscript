@@ -50,6 +50,23 @@ test_c_plugin_builds_and_runs() {
 
 	run_with_env "${PATH}"
 
+	entry_dir="$(find "${cache_root}/C/default" -mindepth 1 -maxdepth 1 -type d | head -n 1 || true)"
+	if [[ -z "${entry_dir}" ]]; then
+		echo "C cache entry not created" >&2
+		exit 1
+	fi
+
+	if find "${entry_dir}" -maxdepth 1 -name 'source.c' | grep -q '.'; then
+		echo "unexpected source.c staged in cache entry" >&2
+		exit 1
+	fi
+
+	meta_output="$("${repo_root}/plugins/C/default/plugin" meta "${script_path}")"
+	if grep -q '> source.c' <<<"${meta_output}"; then
+		echo "C plugin build command should avoid staging source.c" >&2
+		exit 1
+	fi
+
 	nix_bin="$(command -v nix || true)"
 	if [[ -z "${nix_bin}" ]]; then
 		echo "nix command not found; C integration test requires nix" >&2
@@ -96,13 +113,8 @@ test_c_plugin_rebuilds_when_header_changes() {
 #define HEADER_MESSAGE "Header v2"
 EOF
 
-	python3 - <<PY
-import os
-import time
-path = r"${header_path}"
-now = time.time()
-os.utime(path, (now + 5, now + 5))
-PY
+	future_epoch="$(($(date +%s) + 5))"
+	touch -m -d "@${future_epoch}" "${header_path}"
 
 	second_output="$(
 		JUMPSCRIPT_CACHE="${cache_root}" \

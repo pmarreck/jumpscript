@@ -42,7 +42,11 @@ meta() {
 	fi
 
 	local build_cmd
-	build_cmd="nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.c; if [[ -n \"\$JUMPSCRIPT_DEPS\" ]]; then IFS=: read -r -a deps <<< \"\$JUMPSCRIPT_DEPS\"; for dep in \"\${deps[@]}\"; do base=\"\$(basename \"\$dep\")\"; cp \"\$dep\" \"\$base\"; done; unset IFS; fi; cc -O2 source.c -o \"\$JUMPSCRIPT_ARTIFACT\"; rm -f source.c'"
+	build_cmd=$(cat <<'CMD'
+nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; script_dir="$(dirname "$JUMPSCRIPT_SCRIPT")"; tail -n +2 "$JUMPSCRIPT_SCRIPT" | cc -O2 -xc - -iquote "$script_dir" -o "$JUMPSCRIPT_ARTIFACT"'
+CMD
+)
+	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
 
 	cat <<META
 lang=C
