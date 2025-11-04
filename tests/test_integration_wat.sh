@@ -52,6 +52,25 @@ EOF_STUB
 		printf "%s\n" "${output}" >&2
 		exit 1
 	fi
+
+	cat > "${fake_tools}/wat2wasm" <<'EOF_STUB_FAIL'
+#!/usr/bin/env bash
+echo "wat2wasm should not rerun" >&2
+exit 125
+EOF_STUB_FAIL
+	chmod +x "${fake_tools}/wat2wasm"
+
+	second_output="$(
+		PATH="${fake_tools}:${nix_dir}:/bin" \
+		JUMPSCRIPT_CACHE="${cache_root}" \
+		"${runner}" run Wat "${script_path}"
+	)"
+
+	if [[ "${second_output}" != *"WAT hello"* ]]; then
+		echo "Expected cached WAT run to succeed" >&2
+		printf "%s\n" "${second_output}" >&2
+		exit 1
+	fi
 }
 
 test_wat_roundtrip
