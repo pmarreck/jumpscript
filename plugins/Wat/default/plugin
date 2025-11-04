@@ -25,18 +25,44 @@ meta() {
 		artifact_rel="wasm/artifact.wasm"
 	fi
 
-	local current_system wazero_store wazero_bin
-	current_system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
-	wazero_store="$(nix eval --raw --impure "${plugin_dir}#packages.${current_system}.wazero")"
-	wazero_bin="${wazero_store}/bin/wazero"
+	local skip_build="${JUMPSCRIPT_NO_BUILD_DEPS:-0}"
+	local skip_runtime="${JUMPSCRIPT_NO_RUNTIME_DEPS:-0}"
+
+	local build_cmd
+	if [[ "${skip_build}" == "1" ]]; then
+		if ! command -v wat2wasm >/dev/null 2>&1; then
+			echo "wat plugin requires 'wat2wasm' on PATH when --no-build-deps is set" >&2
+			exit 1
+		fi
+		build_cmd='set -e; tail -n +2 "$JUMPSCRIPT_SCRIPT" > source.wat; wat2wasm source.wat -o "$JUMPSCRIPT_ARTIFACT"'
+	else
+		build_cmd="nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc 'set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.wat; wat2wasm source.wat -o \"\$JUMPSCRIPT_ARTIFACT\"'"
+	fi
+
+	local runtime_cmd
+	if [[ "${skip_runtime}" == "1" ]]; then
+		local host_wazero
+		host_wazero="$(command -v wazero || true)"
+		if [[ -z "${host_wazero}" ]]; then
+			echo "wat plugin requires 'wazero' on PATH when --no-runtime-deps is set" >&2
+			exit 1
+		fi
+		runtime_cmd="${host_wazero} run {{artifact}}"
+	else
+		local current_system wazero_store wazero_bin
+		current_system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
+		wazero_store="$(nix eval --raw --impure "${plugin_dir}#packages.${current_system}.wazero")"
+		wazero_bin="${wazero_store}/bin/wazero"
+		runtime_cmd="${wazero_bin} run {{artifact}}"
+	fi
 
 	cat <<META
 lang=Wat
 out_rel=${artifact_rel}
-build_cmd=nix develop ${plugin_dir}#build --command bash --noprofile --norc -lc "set -e; tail -n +2 \"\$JUMPSCRIPT_SCRIPT\" > source.wat; wat2wasm source.wat -o \"\$JUMPSCRIPT_ARTIFACT\""
+build_cmd=${build_cmd}
 rebuild_mode=mtime
 exec_kind=wasm
-runtime_cmd=${wazero_bin} run {{artifact}}
+runtime_cmd=${runtime_cmd}
 META
 }
 

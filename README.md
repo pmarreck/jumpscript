@@ -22,10 +22,10 @@ JumpScript turns compiled languages into fast-launching scripts. It builds on fi
 
 ## Usage
 
-Create a script with a shebang line specifying the language:
+Create a script with a shebang line specifying the language (and optional dependency hints):
 
 ```c
-#!/usr/bin/env -S jumpscript C
+#!/usr/bin/env -S jumpscript --no-runtime-deps C
 # nix: {
 #   buildInputs = [ pkgs.zlib ];
 #   pkgsBranch = "unstable";
@@ -46,6 +46,14 @@ Make it executable and run it:
 chmod +x hello.c
 ./hello.c
 ```
+
+Flags:
+
+- `--no-build-deps` – assume the compiler/toolchain (e.g. `clang`, `wat2wasm`) is already on `PATH` and skip the plugin’s Nix build shell.
+- `--no-runtime-deps` – assume the runtime (e.g. `luajit`, `wazero`) is globally available and skip the Nix runtime shell.
+- `--no-deps` – shorthand for both of the above.
+
+When no flags are supplied, JumpScript boots the plugin’s flake-provided toolchains so scripts “just work.” Once you’ve installed the dependencies yourself, add the appropriate flags to get the faster, direct-exec path.
 
 On the first run JumpScript compiles the script, stores the binary in the cache, and executes it. Subsequent runs skip straight to execution until the script or any tracked dependency changes.
 
@@ -77,13 +85,13 @@ The `# nix:` header block is parsed as a Nix attrset and can contain:
 ## CLI Reference
 
 ```
-jumpscript run <Language[-Version]> <script> [args...]
+jumpscript run [--no-build-deps|--no-runtime-deps|--no-deps] <Language[-Version]> <script> [args...]
 jumpscript --help
 jumpscript --about
 ```
 
 - `--about` prints a one-line description of JumpScript’s purpose.
-- `--help` shows the currently effective cache root, plugin search paths, and the environment variables that override them (`JUMPSCRIPT_CACHE`, `JUMPSCRIPT_PLUGINS_DIR`, `JUMPSCRIPT_USER_PLUGINS`, plus the relevant XDG defaults).
+- `--help` shows the currently effective cache root, plugin search paths, and the environment variables that override them (`JUMPSCRIPT_CACHE`, `JUMPSCRIPT_PLUGINS_DIR`, `JUMPSCRIPT_USER_PLUGINS`, plus the relevant XDG defaults). Use the `--no-*` flags to opt out of the plugin-provided build/runtime shells once you’ve installed the required tools yourself.
 
 All scripts should use the shebang form `#!/usr/bin/env -S jumpscript <Language>`. The optional `-Version` suffix selects a non-default plugin if one is present.
 

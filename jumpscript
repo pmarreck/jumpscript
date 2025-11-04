@@ -85,6 +85,9 @@ while [[ $# -gt 0 ]]; do
 		-h|--help)
 			show_help
 			;;
+		--no-deps|--no-build-deps|--no-runtime-deps)
+			break
+			;;
 		--)
 			shift
 			break
@@ -118,9 +121,44 @@ case "${command}" in
 		;;
 esac
 
-lang_token="${1:-}"
+skip_build_deps=0
+skip_runtime_deps=0
+lang_token=""
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--no-deps)
+			skip_build_deps=1
+			skip_runtime_deps=1
+			shift
+			continue
+			;;
+		--no-build-deps)
+			skip_build_deps=1
+			shift
+			continue
+			;;
+		--no-runtime-deps)
+			skip_runtime_deps=1
+			shift
+			continue
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			if [[ -z "${lang_token}" ]]; then
+				lang_token="$1"
+				shift
+				continue
+			fi
+			break
+			;;
+	esac
+done
+
 [[ -n "${lang_token}" ]] || die "language token is required"
-shift
 
 script_path="${1:-}"
 [[ -n "${script_path}" ]] || die "script path is required"
@@ -169,6 +207,18 @@ fi
 plugin_exec="${plugin_dir}/plugin"
 if [[ ! -x "${plugin_exec}" ]]; then
 	die "plugin executable not found at ${plugin_exec}"
+fi
+
+if [[ "${skip_build_deps}" -eq 1 ]]; then
+	export JUMPSCRIPT_NO_BUILD_DEPS=1
+else
+	unset JUMPSCRIPT_NO_BUILD_DEPS
+fi
+
+if [[ "${skip_runtime_deps}" -eq 1 ]]; then
+	export JUMPSCRIPT_NO_RUNTIME_DEPS=1
+else
+	unset JUMPSCRIPT_NO_RUNTIME_DEPS
 fi
 
 set +e

@@ -74,3 +74,61 @@ EOF_STUB_FAIL
 }
 
 test_wat_roundtrip
+
+test_wat_no_deps_shortcuts() {
+	cache_root="$(make_temp_dir)/cache"
+	script_dir="$(make_temp_dir)"
+	script_path="${script_dir}/hello_no_deps.wat"
+
+	cp "${repo_root}/tests/fixtures/hello.wat" "${script_path}"
+
+	stub_dir="$(make_temp_dir)"
+cat > "${stub_dir}/wat2wasm" <<'EOF_WAT2WASM'
+#!/usr/bin/env sh
+touch "$(dirname "$0")/wat2wasm-invoked"
+out=""
+prev=""
+for arg in "$@"; do
+	if [ "${prev}" = "-o" ]; then
+		out="${arg}"
+		break
+	fi
+	if [ "${arg}" = "-o" ]; then
+		prev="-o"
+	else
+		prev="${arg}"
+	fi
+done
+if [ -z "${out}" ]; then
+	out="$3"
+fi
+printf '\0\0\0\0' > "${out}"
+EOF_WAT2WASM
+chmod +x "${stub_dir}/wat2wasm"
+
+cat > "${stub_dir}/wazero" <<'EOF_WAZERO'
+#!/usr/bin/env sh
+echo "host wazero"
+EOF_WAZERO
+chmod +x "${stub_dir}/wazero"
+
+	bash_dir="$(dirname "$(command -v bash)")"
+	output="$(
+		PATH="${stub_dir}:${bash_dir}" \
+		JUMPSCRIPT_CACHE="${cache_root}" \
+		"${runner}" run --no-deps Wat "${script_path}"
+	)"
+
+	if [[ "${output}" != *"host wazero"* ]]; then
+		echo "Expected host wazero output" >&2
+		printf "%s\n" "${output}" >&2
+		exit 1
+	fi
+
+	if [[ ! -f "${stub_dir}/wat2wasm-invoked" ]]; then
+		echo "wat2wasm stub was not invoked for --no-deps build" >&2
+		exit 1
+	fi
+}
+
+test_wat_no_deps_shortcuts
