@@ -1,0 +1,6 @@
+build/
+.dirtree-state
+/.jj/working_copy/
+.DS_Store
+*.swp
+*.tmp
