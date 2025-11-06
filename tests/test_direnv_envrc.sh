@@ -19,7 +19,7 @@ direnv_path_output="$(
 	)
 )"
 
-if [[ "${direnv_path_output}" != "${repo_root}/jumpscript" ]]; then
+if [[ "${direnv_path_output}" != "${repo_root}/bin/jumpscript" ]]; then
 	echo "Expected jumpscript on PATH after sourcing .envrc" >&2
 	echo "got: ${direnv_path_output}" >&2
 	exit 1

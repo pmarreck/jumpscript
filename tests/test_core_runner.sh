@@ -2,7 +2,7 @@
 set -eo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runner="${repo_root}/jumpscript"
+runner="${repo_root}/bin/jumpscript"
 
 fail() {
 	echo "FAIL: $1" >&2

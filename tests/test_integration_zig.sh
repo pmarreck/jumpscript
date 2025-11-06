@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
-runner="${repo_root}/jumpscript"
+runner="${repo_root}/bin/jumpscript"
 
 tmp_dirs=()
 cleanup() {

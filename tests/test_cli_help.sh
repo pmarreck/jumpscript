@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
-jump="${repo_root}/jumpscript"
+jump="${repo_root}/bin/jumpscript"
 
 expect_equal() {
 	local actual="$1"

@@ -9,16 +9,16 @@ JumpScript turns compiled languages into fast-launching scripts. It builds on fi
    ```bash
    git clone https://github.com/yourusername/jumpscript.git
    ```
-3. Add the `jumpscript` script to your PATH. If you use [direnv](https://direnv.net/), allow the bundled `.envrc` to prepend the repository path automatically:
+3. Add the repository `bin/` directory to your PATH so the `jumpscript` launcher and bundled helper tools are discoverable. If you use [direnv](https://direnv.net/), allow the bundled `.envrc` to prepend the path automatically:
    ```bash
    cd jumpscript
    direnv allow   # optional; keeps PATH scoped to this repo
    ```
-   Otherwise, symlink the script anywhere on your PATH:
+   Otherwise, update your shell configuration or export the path manually:
    ```bash
-   chmod +x jumpscript
-   ln -s "$(pwd)/jumpscript" ~/.local/bin/jumpscript
+   export PATH="$(pwd)/bin:$PATH"
    ```
+   To persist the change, add that line to your shell rc (`~/.bashrc`, `~/.zshrc`, …).
 
 ## Usage
 
@@ -47,6 +47,8 @@ chmod +x hello.c
 ./hello.c
 ```
 
+### Configuration flags & environment variables
+
 Flags:
 
 - `--no-build-deps` – assume the compiler/toolchain (e.g. `clang`, `wat2wasm`) is already on `PATH` and skip the plugin’s Nix build shell.
@@ -56,6 +58,13 @@ Flags:
 When no flags are supplied, JumpScript boots the plugin’s flake-provided toolchains so scripts “just work.” Once you’ve installed the dependencies yourself, add the appropriate flags to get the faster, direct-exec path.
 
 On the first run JumpScript compiles the script, stores the binary in the cache, and executes it. Subsequent runs skip straight to execution until the script or any tracked dependency changes.
+
+Environment variables:
+
+- `JUMPSCRIPT_CACHE` – override the cache root (defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/jumpscript-artifacts`).
+- `JUMPSCRIPT_PLUGINS_DIR` – point JumpScript at alternate bundled plugins.
+- `JUMPSCRIPT_USER_PLUGINS` – add a user plugin search root (defaults to `${XDG_DATA_HOME:-$HOME/.local/share}/jumpscript/plugins`).
+- `JUMPSCRIPT_DEBUG=1` – surface verbose diagnostics from the launcher and plugins.
 
 ## Nix Header
 
@@ -98,6 +107,15 @@ All scripts should use the shebang form `#!/usr/bin/env -S jumpscript <Language>
 ## Direnv Support
 
 The repository includes a `.envrc` that prepends the project directory to `PATH` so the local `jumpscript` executable is discovered automatically. If you use direnv, run `direnv allow` once per clone; otherwise the file has no effect.
+
+## Examples
+
+The `examples/` directory contains ready-to-run scripts that showcase JumpScript in different languages. For instance, `examples/weatherlean` is a Lean 4 version of a simple weather CLI. After setting `OPENWEATHERMAP_APPID`, make it executable and run it directly:
+
+```bash
+chmod +x examples/weatherlean
+OPENWEATHERMAP_APPID=your-token examples/weatherlean
+```
 
 ## Adding New Languages
 

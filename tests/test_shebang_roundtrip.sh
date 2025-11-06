@@ -17,7 +17,7 @@ run_fixture_via_shebang() {
 
 	local output
 	output="$(
-		PATH="${repo_root}:${PATH}" \
+		PATH="${repo_root}/bin:${PATH}" \
 			"${script_path}" "${arg}"
 	)"
 
@@ -34,7 +34,7 @@ run_fixture_via_shebang "tests/fixtures/hello.cpp" "C++ integration OK" "foo"
 # Ensure original fixtures execute via relative path from repo root.
 relative_output="$(
 	cd "${repo_root}"
-	PATH="${repo_root}:${PATH}" \
+	PATH="${repo_root}/bin:${PATH}" \
 		tests/fixtures/hello.d bar
 )"
 
@@ -51,7 +51,7 @@ cp "${repo_root}/tests/fixtures/hello.c" "${tmp_exec_dir}/hello.c"
 chmod +x "${tmp_exec_dir}/hello.c"
 
 pushd "${tmp_exec_dir}" >/dev/null
-output_text="$(PATH="${repo_root}:${PATH}" ./hello.c rant 2>&1)"
+output_text="$(PATH="${repo_root}/bin:${PATH}" ./hello.c rant 2>&1)"
 status=$?
 popd >/dev/null
 rm -rf "${tmp_exec_dir}"

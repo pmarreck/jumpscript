@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir_guess="$(cd "${script_dir}/.." && pwd)"
+if [[ -d "${repo_dir_guess}/plugins" ]]; then
+	base_dir="${repo_dir_guess}"
+else
+	base_dir="${script_dir}"
+fi
+
 plugins_root="${JUMPSCRIPT_PLUGINS_DIR:-${base_dir}/plugins}"
 default_user_plugins_root="${XDG_DATA_HOME:-${HOME}/.local/share}/jumpscript/plugins"
 user_plugins_root="${JUMPSCRIPT_USER_PLUGINS:-${default_user_plugins_root}}"
