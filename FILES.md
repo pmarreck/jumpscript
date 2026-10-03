@@ -68,3 +68,8 @@
 | `plugins/Lean/default/flake.nix` | Toolchain flake for Lean 4 plugin devshell. | Codex (2025-10-28) |
 | `plugins/Lean/default/flake.lock` | Locked nixpkgs input for Lean 4 devshell. | Codex (2025-10-28) |
 | `tests/test_runner_absolute_path.sh` | Ensures runner works from non-repo directories. | Codex (2025-10-28) |
+| `plugins/Roc/default/plugin` | Roc plugin: double extension picks the backend (`.lua.roc` LuaJIT, `.roc` native); compiler from `JUMPSCRIPT_ROC` or PATH. | Claude (2026-10-02) |
+| `plugins/Roc/default/flake.nix` | Roc plugin runtime flake (LuaJIT for `.lua.roc`). | Claude (2026-10-02) |
+| `tests/test_integration_roc.sh` | Roc plugin: backend classification, missing-compiler error, native/LuaJIT runs, cache reuse, flake runtime. | Claude (2026-10-02) |
+| `tests/fixtures/hello.roc` | Native Roc fixture. | Claude (2026-10-02) |
+| `tests/fixtures/hello.lua.roc` | LuaJIT Roc fixture. | Claude (2026-10-02) |

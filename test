@@ -16,6 +16,7 @@ tests=(
 	"tests/test_integration_zig.sh"
 	"tests/test_integration_idris.sh"
 	"tests/test_integration_lean.sh"
+	"tests/test_integration_roc.sh"
 	"tests/test_direnv_envrc.sh"
 	"tests/test_shebang_roundtrip.sh"
 	"tests/test_cli_help.sh"

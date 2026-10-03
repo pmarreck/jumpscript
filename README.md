@@ -90,6 +90,7 @@ The `# nix:` header block is parsed as a Nix attrset and can contain:
 - Nim
 - Wat (WebAssembly Text)
 - MoonScript
+- Roc (`name.roc` native, `name.lua.roc` on LuaJIT; needs a Roc compiler with the LuaJIT backend via `JUMPSCRIPT_ROC` or `roc` on PATH)
 
 ## CLI Reference
 
