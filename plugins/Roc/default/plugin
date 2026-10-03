@@ -2,6 +2,7 @@
 set -euo pipefail
 
 plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+basic_cli_url="https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst"
 
 usage() {
 	cat <<'USAGE'
@@ -11,9 +12,16 @@ Usage: plugin meta <script>
 
 The script's double extension picks the backend:
   name.lua.roc  roc build --target=luajit, run with LuaJIT
+  name.wasm.roc roc build --target=wasm32, run with wasmtime
   name.roc      roc build --opt=speed, run natively
 The compiler is $JUMPSCRIPT_ROC, else `roc` on PATH (a Roc build with the
 LuaJIT backend is needed for .lua.roc scripts).
+
+A .wasm.roc script is a basic-cli 0.23.0 app. It builds against a WASI copy
+of basic-cli: $JUMPSCRIPT_ROC_WASI_PLATFORM names the directory holding its
+main.roc (roc_luajit's luajit_backend/platforms/wasi_basic_cli/build makes
+one). It runs with the whole filesystem preopened and the environment
+inherited, as a native terminal app would.
 USAGE
 }
 
@@ -47,6 +55,33 @@ resolve_luajit() {
 	printf '%s\n' "${store}/bin/luajit"
 }
 
+resolve_wasmtime() {
+	if [[ "${JUMPSCRIPT_NO_RUNTIME_DEPS:-0}" == "1" ]]; then
+		local host
+		host="$(command -v wasmtime || true)"
+		if [[ -z "${host}" ]]; then
+			echo "Roc plugin requires 'wasmtime' on PATH when --no-runtime-deps is set" >&2
+			exit 1
+		fi
+		printf '%s\n' "${host}"
+		return
+	fi
+	local store
+	store="$(nix build --no-link --print-out-paths "${plugin_dir}#wasmtime")"
+	printf '%s\n' "${store}/bin/wasmtime"
+}
+
+# The WASI copy of basic-cli 0.23.0 that .wasm.roc scripts build against,
+# as an absolute directory.
+resolve_wasi_platform() {
+	local dir="${JUMPSCRIPT_ROC_WASI_PLATFORM:-}"
+	if [[ -z "${dir}" || ! -f "${dir}/main.roc" ]]; then
+		echo "Roc plugin needs a WASI basic-cli platform for .wasm.roc: set JUMPSCRIPT_ROC_WASI_PLATFORM to the directory holding its main.roc (got '${dir}')" >&2
+		exit 1
+	fi
+	(cd "${dir}" && pwd)
+}
+
 meta() {
 	local script_path="${1:-}"
 	if [[ -z "${script_path}" ]]; then
@@ -59,8 +94,18 @@ meta() {
 	script_base="$(basename "${script_path}")"
 
 	if [[ "${script_base}" == ?*.wasm.roc ]]; then
-		echo "Roc plugin: .wasm.roc is not supported yet (roc builds a headerless app for wasm32 as an archive that needs a WASI host)" >&2
-		exit 1
+		local platform wasmtime
+		platform="$(resolve_wasi_platform)"
+		wasmtime="$(resolve_wasmtime)"
+		cat <<META
+lang=Roc
+out_rel=wasm/${script_base%.wasm.roc}.wasm
+build_cmd='${roc}' build --target=wasm32 --opt=speed --replace-dep ${basic_cli_url} '${platform}/main.roc' "\$JUMPSCRIPT_SCRIPT" --output="\$JUMPSCRIPT_ARTIFACT" >&2
+rebuild_mode=mtime
+exec_kind=wasm
+runtime_cmd=${wasmtime} run -S inherit-env=y --dir=/ {{artifact}}
+META
+		return
 	fi
 	if [[ "${script_base}" == ?*.lua.roc ]]; then
 		local luajit
