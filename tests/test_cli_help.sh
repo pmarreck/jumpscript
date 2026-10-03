@@ -29,7 +29,9 @@ about_long_output="$("${jump}" --about)"
 expect_equal "${about_long_output}" "${about_output}"
 
 tmp_dir="$(mktemp -d)"
-trap 'rm -rf "${tmp_dir}"' EXIT
+# The cleanup runs without the XDG overrides below, which point into tmp_dir
+# itself (an rm wrapper that trashes files would look for its trash there).
+trap 'env -u XDG_DATA_HOME -u XDG_CACHE_HOME rm -rf "${tmp_dir}"' EXIT
 
 export XDG_CACHE_HOME="${tmp_dir}/xdg-cache"
 export JUMPSCRIPT_CACHE="${tmp_dir}/explicit-cache"

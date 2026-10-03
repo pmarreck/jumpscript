@@ -118,9 +118,12 @@ echo "host wazero"
 EOF_WAZERO
 chmod +x "${stub_dir}/wazero"
 
+	# bash and the coreutils the runner needs (dirname, mkdir, ...) may live in
+	# different directories.
 	bash_dir="$(dirname "$(command -v bash)")"
+	coreutils_dir="$(dirname "$(command -v dirname)")"
 	output="$(
-		PATH="${stub_dir}:${bash_dir}" \
+		PATH="${stub_dir}:${bash_dir}:${coreutils_dir}" \
 		JUMPSCRIPT_CACHE="${cache_root}" \
 		"${runner}" run --no-deps Wat "${script_path}"
 	)"
