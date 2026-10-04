@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 tests=(
+	"tests/test_zig_core.sh"
 	"tests/test_core_runner.sh"
 	"tests/test_integration_c.sh"
 	"tests/test_integration_moon.sh"

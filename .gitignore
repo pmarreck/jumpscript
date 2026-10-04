@@ -5,3 +5,6 @@ build/
 *.swp
 *.tmp
 .resume-agent
+zig-out
+.zig-cache
+zig-pkg

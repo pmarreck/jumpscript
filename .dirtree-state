@@ -1,8 +1,15 @@
-ver=1.1
+# Dirtree: Stateful directory trees in the CLI for humans and LLMs. https://github.com/pmarreck/dirtree
+ver=1.2
 depth=4
 
 hide=[
 	.claude
 	.git
 	.jj
+]
+
+annotate=[
+	build.zig = Zig build: core unit tests (zig build test); default ReleaseFast
+	src/core.zig = Zig runner pure core: argv parsing, meta parse/validate, out_rel containment, runtime expansion, deps, cache entry key, staleness, meta-cache key and file format
+	tests/test_zig_core.sh = Runs the Zig core unit tests in ReleaseFast and Debug
 ]

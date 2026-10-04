@@ -22,6 +22,11 @@
 	- C, C++, Crystal, D, Nim, Rust, Zig, Idris, Moon, and Wat plugins now stream originals (or transient sanitized copies) without persistent staging; matching tests assert metadata no longer references `source.*` intermediates.
 
 ## TODO
+0. **Zig runner (in progress, 2026-10-04)**
+	- Replace the Bash `bin/jumpscript` with a Zig binary: a pure core (argument parsing, meta parsing and validation, cache keys, staleness, runtime command expansion, meta-cache keying) plus a Zig I/O adapter (stat, mkdir, spawn, exec). Same CLI, plugin contract, cache layout and error messages; the existing shell suite is the behavioral oracle.
+	- Cache plugin `meta` output so a warm run starts only the program. The key covers the plugin directory's files (names, mtimes, sizes), the script path, mtime and size, the `--no-*` flags, `PATH` and every `JUMPSCRIPT_*` variable. A cached entry is also invalid when a declared dependency's mtime changed or an absolute runtime path no longer exists.
+	- Rebuild staleness compares nanosecond mtimes (the Bash runner compared whole seconds, so two edits within one second could reuse a stale build).
+	- Measured before: a warm run takes 180 ms (the program 0.5 ms, the plugin's meta 18 ms, the rest about 50 process launches in the Bash runner).
 1. **Include/Multi-file Coverage**
 	- C headers, Nim includes, Rust modules, Crystal requires, Idris imports, Lean modules, and Zig imports now tracked; replicate the pattern for remaining languages (e.g., WAT module graphs, language-specific package managers) to validate cache keying across the board.
 
