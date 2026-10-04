@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${repo_root}/tests/lib/host.bash"
 runner="${repo_root}/bin/jumpscript"
 
 tmp_dirs=()
@@ -72,7 +73,7 @@ test_c_plugin_builds_and_runs() {
 		echo "nix command not found; C integration test requires nix" >&2
 		exit 1
 	fi
-	nix_dir="$(dirname "${nix_bin}")"
+	nix_dir="$(minimal_host_dir "$(make_temp_dir)" "${nix_bin}")"
 	fake_cc_dir="$(make_temp_dir)"
 	cat > "${fake_cc_dir}/cc" <<'EOF'
 #!/usr/bin/env bash
@@ -84,7 +85,7 @@ chmod +x "${fake_cc_dir}/cc"
 # Force rebuild by modifying source
 echo "// tweak" >> "${script_path}"
 
-run_with_env "${fake_cc_dir}:${nix_dir}:/bin"
+run_with_env "${fake_cc_dir}:${nix_dir}"
 }
 
 test_c_plugin_rebuilds_when_header_changes() {

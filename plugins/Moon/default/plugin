@@ -1,14 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+plugin_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+# Pure-Bash helpers: before the flake supplies tools, only nix and bash are assumed.
+source "${plugin_dir}/../../_lib/plugin_lib.bash"
 
 usage() {
-	cat <<'USAGE'
+	pl_cat <<'USAGE'
 Usage: plugin meta <script>
        plugin doctor
        plugin help
 USAGE
+}
+
+# The Lua that runs compiled scripts: the flake's (built, not just evaluated,
+# so the store path exists), or the host's under --no-runtime-deps.
+resolve_lua() {
+	if [[ "${JUMPSCRIPT_NO_RUNTIME_DEPS:-0}" == "1" ]]; then
+		local host
+		host="$(command -v lua || true)"
+		if [[ -z "${host}" ]]; then
+			echo "Moon plugin requires 'lua' on PATH when --no-runtime-deps is set" >&2
+			exit 1
+		fi
+		printf '%s\n' "${host}"
+		return
+	fi
+	local store
+	store="$(nix build --no-link --print-out-paths "${plugin_dir}#lua")"
+	printf '%s\n' "${store}/bin/lua"
 }
 
 meta() {
@@ -19,26 +39,28 @@ meta() {
 	fi
 
 	local script_base artifact_rel
-	script_base="$(basename "${script_path}")"
+	script_base="${script_path##*/}"
 	artifact_rel="lua/${script_base%.*}.lua"
 	if [[ "${artifact_rel}" == "lua/.lua" ]]; then
 		artifact_rel="lua/artifact.lua"
 	fi
 
 	local build_cmd
-	build_cmd=$(cat <<'CMD'
+	pl_heredoc build_cmd <<'CMD'
 nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; script_dir="$(dirname "$JUMPSCRIPT_SCRIPT")"; tmp="$(mktemp "$script_dir/.jumpscript-$$-XXXXXX.moon")"; cleanup() { rm -f "$tmp" "${tmp%.moon}.lua"; }; trap cleanup EXIT; tail -n +2 "$JUMPSCRIPT_SCRIPT" > "$tmp"; moonc "$tmp"; mv "${tmp%.moon}.lua" "$JUMPSCRIPT_ARTIFACT"'
 CMD
-)
 	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
 
-	cat <<META
+	local lua
+	lua="$(resolve_lua)"
+
+	pl_cat <<META
 lang=Moon
 out_rel=${artifact_rel}
 build_cmd=${build_cmd}
 rebuild_mode=mtime
 exec_kind=lua
-runtime_cmd=lua {{artifact}}
+runtime_cmd=${lua} {{artifact}}
 META
 }
 

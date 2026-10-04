@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+plugin_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+# Pure-Bash helpers: before the flake supplies tools, only nix and bash are assumed.
+source "${plugin_dir}/../../_lib/plugin_lib.bash"
 
 usage() {
-	cat <<'USAGE'
+	pl_cat <<'USAGE'
 Usage: plugin meta <script>
        plugin doctor
        plugin help
@@ -19,20 +21,19 @@ meta() {
 	fi
 
 	local script_base artifact_rel
-	script_base="$(basename "${script_path}")"
+	script_base="${script_path##*/}"
 	artifact_rel="bin/${script_base%.*}"
 	if [[ "${artifact_rel}" == "bin/" ]]; then
 		artifact_rel="bin/artifact"
 	fi
 
 	local build_cmd
-	build_cmd=$(cat <<'CMD'
+	pl_heredoc build_cmd <<'CMD'
 nix develop __PLUGIN__#build --command bash --noprofile --norc -lc 'set -e; script_dir="$(dirname "$JUMPSCRIPT_SCRIPT")"; tail -n +2 "$JUMPSCRIPT_SCRIPT" | g++ -std=c++20 -O2 -xc++ -iquote "$script_dir" - -o "$JUMPSCRIPT_ARTIFACT"'
 CMD
-)
 	build_cmd="${build_cmd/__PLUGIN__/${plugin_dir}}"
 
-	cat <<META
+	pl_cat <<META
 lang=C++
 out_rel=${artifact_rel}
 build_cmd=${build_cmd}

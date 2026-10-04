@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
+source "${repo_root}/tests/lib/host.bash"
 runner="${repo_root}/bin/jumpscript"
 
 tmp_dirs=()
@@ -30,7 +31,7 @@ run_cpp_fixture() {
 		echo "nix command not found; C++ integration test requires nix" >&2
 		exit 1
 	fi
-	nix_dir="$(dirname "${nix_bin}")"
+	nix_dir="$(minimal_host_dir "$(make_temp_dir)" "${nix_bin}")"
 	fake_compilers="$(make_temp_dir)"
 	cat > "${fake_compilers}/g++" <<'FAKE'
 #!/usr/bin/env bash
@@ -40,7 +41,7 @@ FAKE
 	chmod +x "${fake_compilers}/g++"
 
 	output="$(
-		PATH="${fake_compilers}:${nix_dir}:/bin" \
+		PATH="${fake_compilers}:${nix_dir}" \
 		JUMPSCRIPT_CACHE="${cache_root}" \
 		"${runner}" run C++ "${script_path}" foo bar
 	)"

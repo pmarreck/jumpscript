@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${repo_root}/tests/lib/host.bash"
 runner="${repo_root}/bin/jumpscript"
 
 tmp_dirs=()
@@ -32,7 +33,7 @@ test_wat_roundtrip() {
 		exit 1
 	fi
 
-	nix_dir="$(dirname "${nix_bin}")"
+	nix_dir="$(minimal_host_dir "$(make_temp_dir)" "${nix_bin}")"
 	fake_tools="$(make_temp_dir)"
 	cat > "${fake_tools}/wat2wasm" <<'EOF_STUB'
 #!/usr/bin/env bash
@@ -42,7 +43,7 @@ EOF_STUB
 	chmod +x "${fake_tools}/wat2wasm"
 
 	output="$(
-		PATH="${fake_tools}:${nix_dir}:/bin" \
+		PATH="${fake_tools}:${nix_dir}" \
 		JUMPSCRIPT_CACHE="${cache_root}" \
 		"${runner}" run Wat "${script_path}"
 	)"
@@ -67,7 +68,7 @@ EOF_STUB_FAIL
 	chmod +x "${fake_tools}/wat2wasm"
 
 	second_output="$(
-		PATH="${fake_tools}:${nix_dir}:/bin" \
+		PATH="${fake_tools}:${nix_dir}" \
 		JUMPSCRIPT_CACHE="${cache_root}" \
 		"${runner}" run Wat "${script_path}"
 	)"

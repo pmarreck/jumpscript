@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+plugin_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+# Pure-Bash helpers: before the flake supplies tools, only nix and bash are assumed.
+source "${plugin_dir}/../../_lib/plugin_lib.bash"
 basic_cli_url="https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst"
 
 usage() {
-	cat <<'USAGE'
+	pl_cat <<'USAGE'
 Usage: plugin [--backend=native|luajit|wasm] meta <script>
        plugin doctor
        plugin help
@@ -94,7 +96,7 @@ meta() {
 
 	local roc script_base ext_backend="" backend stem suffix
 	roc="$(resolve_roc)"
-	script_base="$(basename "${script_path}")"
+	script_base="${script_path##*/}"
 	case "${script_base}" in
 		?*.lua.roc) ext_backend=luajit ;;
 		?*.wasm.roc) ext_backend=wasm ;;
@@ -117,7 +119,7 @@ meta() {
 		local platform wasmtime
 		platform="$(resolve_wasi_platform)"
 		wasmtime="$(resolve_wasmtime)"
-		cat <<META
+		pl_cat <<META
 lang=Roc
 out_rel=wasm/${stem}.wasm
 build_cmd='${roc}' build --target=wasm32 --opt=speed --replace-dep ${basic_cli_url} '${platform}/main.roc' "\$JUMPSCRIPT_SCRIPT" --output="\$JUMPSCRIPT_ARTIFACT" >&2
@@ -130,7 +132,7 @@ META
 	if [[ "${backend}" == luajit ]]; then
 		local luajit
 		luajit="$(resolve_luajit)"
-		cat <<META
+		pl_cat <<META
 lang=Roc
 out_rel=lua/${stem}.lua
 build_cmd='${roc}' build --target=luajit "\$JUMPSCRIPT_SCRIPT" --output="\$JUMPSCRIPT_ARTIFACT" >&2
@@ -139,7 +141,7 @@ exec_kind=lua
 runtime_cmd=${luajit} {{artifact}}
 META
 	else
-		cat <<META
+		pl_cat <<META
 lang=Roc
 out_rel=bin/${stem}
 build_cmd='${roc}' build --opt=speed "\$JUMPSCRIPT_SCRIPT" --output="\$JUMPSCRIPT_ARTIFACT" >&2

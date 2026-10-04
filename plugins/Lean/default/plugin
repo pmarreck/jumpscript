@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+plugin_dir="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+# Pure-Bash helpers: before the flake supplies tools, only nix and bash are assumed.
+source "${plugin_dir}/../../_lib/plugin_lib.bash"
 
 usage() {
-	cat <<'USAGE'
+	pl_cat <<'USAGE'
 Usage: plugin meta <script>
        plugin doctor
        plugin help
@@ -19,8 +21,8 @@ meta() {
 	fi
 
 	local script_dir script_base artifact_rel
-	script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
-	script_base="$(basename "${script_path}")"
+	script_dir="$(cd "${script_path%/*}/" && pwd)"
+	script_base="${script_path##*/}"
 	artifact_rel="bin/${script_base%.*}"
 	if [[ "${artifact_rel}" == "bin/" ]]; then
 		artifact_rel="bin/artifact"
@@ -34,7 +36,7 @@ meta() {
 		module="${line#import }"
 		module="${module%%--*}"
 		module="${module%% *}"
-		module="$(printf "%s" "${module}" | sed 's/[[:space:]]*$//')"
+		module="${module%"${module##*[![:space:]]}"}"
 		[[ -z "${module}" ]] && continue
 		if [[ "${module:0:1}" == "\"" ]]; then
 			module="${module%\"}"
@@ -51,7 +53,7 @@ meta() {
 		if [[ -f "${script_dir}/${module_path}" ]]; then
 			deps+=("${module_path}")
 		fi
-	done < <(tail -n +2 "${script_path}")
+	done < <(pl_body "${script_path}")
 
 	local deps_value=""
 	if (( ${#deps[@]} )); then
@@ -60,7 +62,7 @@ meta() {
 	fi
 
 	local inner_script
-	inner_script=$(cat <<'IN'
+	pl_heredoc inner_script <<'IN'
 set -e
 pkg=$(basename "$JUMPSCRIPT_SCRIPT" .lean)
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/jumpscript-lean-${PPID}-XXXXXX")
@@ -114,13 +116,12 @@ lake build "$pkg" >/dev/null 2>&1
 cp ".lake/build/bin/$pkg" "$JUMPSCRIPT_ARTIFACT"
 chmod +x "$JUMPSCRIPT_ARTIFACT"
 IN
-)
 
 	local build_cmd
 	build_cmd=$(printf 'nix develop %s#build --command bash --noprofile --norc -lc %q' \
 		"${plugin_dir}" "${inner_script}")
 
-	cat <<META
+	pl_cat <<META
 lang=Lean
 out_rel=${artifact_rel}
 build_cmd=${build_cmd}

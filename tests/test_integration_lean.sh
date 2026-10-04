@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
+source "${repo_root}/tests/lib/host.bash"
 runner="${repo_root}/bin/jumpscript"
 
 tmp_dirs=()
@@ -30,7 +31,7 @@ run_lean_fixture() {
 		echo "nix command not found; Lean integration test requires nix" >&2
 		exit 1
 	fi
-	nix_dir="$(dirname "${nix_bin}")"
+	nix_dir="$(minimal_host_dir "$(make_temp_dir)" "${nix_bin}")"
 	fake="$(make_temp_dir)"
 	cat > "${fake}/lean" <<'FAKE'
 #!/usr/bin/env bash
@@ -40,7 +41,7 @@ FAKE
 	chmod +x "${fake}/lean"
 
 	output="$(
-		PATH="${fake}:${nix_dir}:/bin" \
+		PATH="${fake}:${nix_dir}" \
 		JUMPSCRIPT_CACHE="${cache_root}" \
 		"${runner}" run Lean "${script_path}" foo 2>&1
 	)"

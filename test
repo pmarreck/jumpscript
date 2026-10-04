@@ -10,6 +10,7 @@ tests=(
 	"tests/test_core_runner.sh"
 	"tests/test_meta_cache.sh"
 	"tests/test_concurrency.sh"
+	"tests/test_plugin_lib.sh"
 	"tests/test_integration_c.sh"
 	"tests/test_integration_moon.sh"
 	"tests/test_integration_wat.sh"

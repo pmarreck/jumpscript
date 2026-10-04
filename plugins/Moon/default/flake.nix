@@ -7,6 +7,10 @@
     systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
     forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
   in {
+    packages = forAllSystems (system: {
+      lua = (import nixpkgs { inherit system; }).lua;
+    });
+
     devShells = forAllSystems (system:
       let
         pkgs = import nixpkgs { inherit system; };

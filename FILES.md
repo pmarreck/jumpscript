@@ -88,3 +88,6 @@
 | `tests/fixtures/hello.roc` | Native Roc fixture. | Claude (2026-10-02) |
 | `tests/fixtures/hello.lua.roc` | LuaJIT Roc fixture. | Claude (2026-10-02) |
 | `tests/fixtures/hello.wasm.roc` | basic-cli 0.23.0 Roc fixture for wasm32 on the WASI platform. | Claude (2026-10-03) |
+| `plugins/_lib/plugin_lib.bash` | Pure-Bash stand-ins (pl_cat, pl_heredoc, pl_matches, pl_body) for host tools plugins used before Nix. | Claude (2026-10-04) |
+| `tests/lib/host.bash` | `minimal_host_dir`: a PATH directory with only nix and bash for the integration tests. | Claude (2026-10-04) |
+| `tests/test_plugin_lib.sh` | Checks plugin_lib helpers against cat, tail and grep. | Claude (2026-10-04) |

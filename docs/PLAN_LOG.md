@@ -9,3 +9,4 @@ Completed PLAN.md items retired by plan-retire, oldest retirement first.
 - [x] [Earlier completions] Shebang roundtrip coverage in tests/test_shebang_roundtrip.sh (done 2025-11-04)
 - [x] [Earlier completions] User plugin search path ${JUMPSCRIPT_USER_PLUGINS} ahead of bundled plugins (done 2025-10-29)
 - [x] [Earlier completions] Lean 4 native build through a Lake scaffold (done 2025-10-29)
+- [x] [Earlier completions] Direct compile pipeline: C, C++, Crystal, D, Nim, Rust, Zig, Idris, Moon and Wat plugins stream originals without persistent staging (done 2025-11-05)
