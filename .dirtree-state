@@ -9,6 +9,7 @@ hide=[
 ]
 
 annotate=[
+	INTENT.md = Purpose, users, outcomes, scope, constraints and open questions (canonical)
 	PLAN.md = Open work in priority order (planning-work format)
 	build = Builds the Zig runner into bin/jumpscript
 	build.zig = Zig build: core unit tests (zig build test); default ReleaseFast

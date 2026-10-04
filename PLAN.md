@@ -2,7 +2,8 @@
 Open work for jumpscript, highest priority first. Managed with the planning-work routine: completed items retire to docs/PLAN_LOG.md, background lives in docs/plan_context/ (start with project_overview.md).
 
 ## Now
-- [ ] macOS aarch64: make the language integration suites pass (PATH without coreutils in tests, C/C++ builds abort with exit 134, Roc needs a compiler) (context: docs/plan_context/macos.md)
+- [ ] macOS aarch64: plugins must work before Nix supplies tools (no host dirname), and the C/C++ builds abort with exit 134 (context: docs/plan_context/macos.md)
+- [ ] Roc plugin procures its compiler through Nix (the roc_luajit flake) and builds the WASI basic-cli platform on demand; JUMPSCRIPT_ROC and JUMPSCRIPT_ROC_WASI_PLATFORM become optional overrides (INTENT.md)
 - [x] Run the runner's own suites on macOS aarch64; portable mtimes in test_meta_cache (done 2026-10-04 16:13 EDT, b8941ad)
 - [x] Remove runner races: one build per cache entry, cache dirs created at mode 700, atomic meta.env and meta-cache writes (done 2026-10-04 16:07 EDT, 7a1f437) (context: docs/plan_context/zig_runner.md)
 - [x] --about prints version, purpose, OS and architecture (done 2026-10-04 16:02 EDT, 36a02ec)

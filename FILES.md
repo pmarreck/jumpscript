@@ -2,6 +2,7 @@
 
 | Path | Purpose | Created By |
 | --- | --- | --- |
+| `INTENT.md` | Canonical purpose, users, outcomes, scope, constraints and open questions. | Claude (2026-10-04) |
 | `PLAN.md` | Open work in priority order (planning-work format); replaced PROJECT_PLAN.md and NEXT_STEPS.md. | Claude (2026-10-04) |
 | `docs/PLAN_LOG.md` | Retired plan items, append-only, with section paths. | Claude (2026-10-04) |
 | `docs/plan_context/` | Background for plan items: project overview and constraints, Zig runner, macOS suites, Nix env delta caching. | Claude (2026-10-04) |
