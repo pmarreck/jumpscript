@@ -22,6 +22,8 @@
 	- C, C++, Crystal, D, Nim, Rust, Zig, Idris, Moon, and Wat plugins now stream originals (or transient sanitized copies) without persistent staging; matching tests assert metadata no longer references `source.*` intermediates.
 
 ## TODO
+00. **Remove runner races (BDFN 2026-10-04)**
+	- Concurrent runs of one script: one build per cache entry (an exclusive lock around check, build and stamp, with a re-check after acquiring it), cache directories created at mode 700 atomically instead of mkdir-then-chmod, and meta.env written atomically. A shell test starts several cold runs at once and asserts one build, correct output from all, and no permission errors.
 0. **Zig runner (done 2026-10-04)**
 	- Replace the Bash `bin/jumpscript` with a Zig binary: a pure core (argument parsing, meta parsing and validation, cache keys, staleness, runtime command expansion, meta-cache keying) plus a Zig I/O adapter (stat, mkdir, spawn, exec). Same CLI, plugin contract, cache layout and error messages; the existing shell suite is the behavioral oracle.
 	- Cache plugin `meta` output so a warm run starts only the program. The key covers the plugin directory's files (names, mtimes, sizes), the script path, mtime and size, the `--no-*` flags, `PATH` and every `JUMPSCRIPT_*` variable. A cached entry is also invalid when a declared dependency's mtime changed or an absolute runtime path no longer exists.

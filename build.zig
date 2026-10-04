@@ -1,4 +1,5 @@
 const std = @import("std");
+const manifest = @import("build.zig.zon");
 
 pub fn build(b: *std.Build) void {
 	const target = b.standardTargetOptions(.{});
@@ -10,13 +11,19 @@ pub fn build(b: *std.Build) void {
 		.optimize = optimize,
 	});
 
+	const options = b.addOptions();
+	options.addOption([]const u8, "version", manifest.version);
+
 	const exe = b.addExecutable(.{
 		.name = "jumpscript",
 		.root_module = b.createModule(.{
 			.root_source_file = b.path("src/main.zig"),
 			.target = target,
 			.optimize = optimize,
-			.imports = &.{.{ .name = "core", .module = core }},
+			.imports = &.{
+				.{ .name = "core", .module = core },
+				.{ .name = "build_options", .module = options.createModule() },
+			},
 			.strip = optimize != .Debug,
 		}),
 	});

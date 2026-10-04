@@ -3,10 +3,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const core = @import("core");
+const build_options = @import("build_options");
 const Io = std.Io;
 const Dir = std.Io.Dir;
 
-const summary = "jumpscript: cached edit-run harness for compiled languages";
+const purpose = "cached edit-run harness for compiled languages";
+const summary = "jumpscript: " ++ purpose;
+/// --about: name, version, purpose, and the OS and CPU the binary was built for.
+const about_line = std.fmt.comptimePrint("jumpscript {s}: {s} ({s} {s})\n", .{ build_options.version, purpose, @tagName(builtin.os.tag), @tagName(builtin.cpu.arch) });
 const secure_mode: std.posix.mode_t = 0o700;
 const meta_dir_name = ".meta";
 
@@ -78,7 +82,7 @@ pub fn main(init: std.process.Init.Minimal) u8 {
 	const paths = pluginRoots(ctx);
 	switch (core.parseArgs(args)) {
 		.about => {
-			writeOut(ctx, summary ++ "\n");
+			writeOut(ctx, about_line);
 			return 0;
 		},
 		.help => {

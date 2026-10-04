@@ -23,7 +23,12 @@ expect_contains() {
 }
 
 about_output="$("${jump}" -a)"
-expect_equal "${about_output}" "jumpscript: cached edit-run harness for compiled languages"
+# One line: name, version (from build.zig.zon), purpose, and the OS and CPU
+# architecture the binary was built for.
+version="$(sed -n 's/^[[:space:]]*\.version = "\([^"]*\)",$/\1/p' "${repo_root}/build.zig.zon")"
+case "$(uname -s)" in Linux) os=linux ;; Darwin) os=macos ;; *) os="$(uname -s)" ;; esac
+case "$(uname -m)" in arm64) arch=aarch64 ;; *) arch="$(uname -m)" ;; esac
+expect_equal "${about_output}" "jumpscript ${version}: cached edit-run harness for compiled languages (${os} ${arch})"
 
 about_long_output="$("${jump}" --about)"
 expect_equal "${about_long_output}" "${about_output}"
