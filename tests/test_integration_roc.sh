@@ -48,6 +48,40 @@ meta="$(JUMPSCRIPT_ROC="${stub_roc}" "${plugin}" meta /scripts/hello.lua.roc)"
 meta="$(JUMPSCRIPT_ROC="${stub_roc}" "${plugin}" meta /scripts/hello.roc)"
 [[ "$(meta_field "${meta}" build_cmd)" != *"--target="* ]] || fail "native build must not set a target: ${meta}"
 
+# Extensionless scripts name the backend in the shebang (jumpscript Roc,
+# Roc-luajit, Roc-wasm: plugins/Roc/<variant>). Classified over the cross
+# product of variants and names: a named backend overrides plain names, plain
+# Roc defers to a double extension, and a contradiction is an error ("!").
+variants=(default luajit wasm)
+v_names=(hello hello.roc hello.lua.roc hello.wasm.roc my.lua/hello my.wasm/hello.roc)
+v_kinds_default=(bin bin lua wasm bin bin)
+v_kinds_luajit=(lua lua lua '!' lua lua)
+v_kinds_wasm=(wasm wasm '!' wasm wasm wasm)
+for variant in "${variants[@]}"; do
+	variant_plugin="${repo_root}/plugins/Roc/${variant}/plugin"
+	kinds_var="v_kinds_${variant}[@]"
+	want_kinds=("${!kinds_var}")
+	for i in "${!v_names[@]}"; do
+		name="${v_names[$i]}"
+		want="${want_kinds[$i]}"
+		meta="$(JUMPSCRIPT_ROC="${stub_roc}" JUMPSCRIPT_ROC_WASI_PLATFORM="${stub_platform}" "${variant_plugin}" meta "/scripts/${name}" 2>"${tmp_root}/variant.err")"
+		status=$?
+		err="$(cat "${tmp_root}/variant.err")"
+		if [[ "${want}" == "!" ]]; then
+			[[ ${status} -ne 0 && "${err}" == *"Roc-${variant}"* && "${err}" == *"${name}"* ]] || fail "Roc-${variant} ${name}: want a conflict error, got status ${status}, stderr '${err}', meta '${meta}'"
+		else
+			got="$(meta_field "${meta}" exec_kind)"
+			[[ ${status} -eq 0 && "${got}" == "${want}" ]] || fail "Roc-${variant} ${name}: exec_kind '${got}', want '${want}' (status ${status}, stderr '${err}')"
+		fi
+	done
+done
+# Artifact names drop whichever Roc suffix the script has, if any.
+for spec in "default:hello:bin/hello" "luajit:hello:lua/hello.lua" "luajit:hello.roc:lua/hello.lua" "wasm:hello:wasm/hello.wasm" "wasm:hello.roc:wasm/hello.wasm"; do
+	IFS=: read -r variant name want <<<"${spec}"
+	meta="$(JUMPSCRIPT_ROC="${stub_roc}" JUMPSCRIPT_ROC_WASI_PLATFORM="${stub_platform}" "${repo_root}/plugins/Roc/${variant}/plugin" meta "/scripts/${name}" 2>&1)"
+	[[ "$(meta_field "${meta}" out_rel)" == "${want}" ]] || fail "Roc-${variant} ${name}: out_rel want '${want}': ${meta}"
+done
+
 basic_cli_url="https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst"
 meta="$(JUMPSCRIPT_ROC="${stub_roc}" JUMPSCRIPT_ROC_WASI_PLATFORM="${stub_platform}" "${plugin}" meta /scripts/hello.wasm.roc)"
 build_cmd="$(meta_field "${meta}" build_cmd)"
@@ -94,6 +128,22 @@ for spec in "hello.lua.roc:luajit" "hello.wasm.roc:wasmtime"; do
 	cp "${repo_root}/tests/fixtures/${script}" "${dir}/${script}"
 	out="$(JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${roc_bin}" JUMPSCRIPT_ROC_WASI_PLATFORM="${wasi_platform}" "${runner}" run Roc "${dir}/${script}" x x 2>"${dir}/err")"
 	[[ "${out}" == *"Roc hello 2"* ]] || fail "flake ${tool}: output '${out}', stderr $(cat "${dir}/err")"
+done
+
+# Extensionless executables run directly through their shebang, one per
+# backend, with jumpscript found on PATH.
+for spec in "hello.roc:Roc" "hello.lua.roc:Roc-luajit" "hello.wasm.roc:Roc-wasm"; do
+	fixture="${spec%%:*}"
+	token="${spec##*:}"
+	dir="${tmp_root}/shebang-${token}.d"
+	mkdir -p "${dir}"
+	{
+		printf '#!/usr/bin/env -S jumpscript %s\n' "${token}"
+		tail -n +2 "${repo_root}/tests/fixtures/${fixture}"
+	} > "${dir}/hello"
+	chmod +x "${dir}/hello"
+	out="$(PATH="${repo_root}/bin:${PATH}" JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${roc_bin}" JUMPSCRIPT_ROC_WASI_PLATFORM="${wasi_platform}" "${dir}/hello" p q r s 2>"${dir}/err")"
+	[[ "${out}" == *"Roc hello 4"* ]] || fail "extensionless ${token}: output '${out}', stderr $(cat "${dir}/err")"
 done
 
 if [[ ${failures} -ne 0 ]]; then

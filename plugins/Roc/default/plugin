@@ -6,14 +6,17 @@ basic_cli_url="https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GN
 
 usage() {
 	cat <<'USAGE'
-Usage: plugin meta <script>
+Usage: plugin [--backend=native|luajit|wasm] meta <script>
        plugin doctor
        plugin help
 
-The script's double extension picks the backend:
-  name.lua.roc  roc build --target=luajit, run with LuaJIT
-  name.wasm.roc roc build --target=wasm32, run with wasmtime
-  name.roc      roc build --opt=speed, run natively
+The backend comes from the shebang's language token, which selects this
+plugin's variant directory, or else from the script's double extension:
+  jumpscript Roc-luajit, or name.lua.roc   roc build --target=luajit, run with LuaJIT
+  jumpscript Roc-wasm, or name.wasm.roc    roc build --target=wasm32, run with wasmtime
+  jumpscript Roc (any other name)          roc build --opt=speed, run natively
+Extensionless scripts therefore name their backend in the shebang. A named
+backend that contradicts the double extension is an error.
 The compiler is $JUMPSCRIPT_ROC, else `roc` on PATH (a Roc build with the
 LuaJIT backend is needed for .lua.roc scripts).
 
@@ -89,17 +92,34 @@ meta() {
 		exit 1
 	fi
 
-	local roc script_base
+	local roc script_base ext_backend="" backend stem suffix
 	roc="$(resolve_roc)"
 	script_base="$(basename "${script_path}")"
+	case "${script_base}" in
+		?*.lua.roc) ext_backend=luajit ;;
+		?*.wasm.roc) ext_backend=wasm ;;
+	esac
+	if [[ -n "${declared_backend}" && -n "${ext_backend}" && "${ext_backend}" != "${declared_backend}" ]]; then
+		echo "Roc plugin: jumpscript Roc-${declared_backend} conflicts with the ${ext_backend} double extension of ${script_path}" >&2
+		exit 1
+	fi
+	backend="${declared_backend:-${ext_backend:-native}}"
+	# The artifact name drops whichever Roc suffix the script has, if any.
+	stem="${script_base}"
+	for suffix in .lua.roc .wasm.roc .roc; do
+		if [[ "${stem}" == ?*"${suffix}" ]]; then
+			stem="${stem%"${suffix}"}"
+			break
+		fi
+	done
 
-	if [[ "${script_base}" == ?*.wasm.roc ]]; then
+	if [[ "${backend}" == wasm ]]; then
 		local platform wasmtime
 		platform="$(resolve_wasi_platform)"
 		wasmtime="$(resolve_wasmtime)"
 		cat <<META
 lang=Roc
-out_rel=wasm/${script_base%.wasm.roc}.wasm
+out_rel=wasm/${stem}.wasm
 build_cmd='${roc}' build --target=wasm32 --opt=speed --replace-dep ${basic_cli_url} '${platform}/main.roc' "\$JUMPSCRIPT_SCRIPT" --output="\$JUMPSCRIPT_ARTIFACT" >&2
 rebuild_mode=mtime
 exec_kind=wasm
@@ -107,12 +127,12 @@ runtime_cmd=${wasmtime} run -S inherit-env=y --dir=/ {{artifact}}
 META
 		return
 	fi
-	if [[ "${script_base}" == ?*.lua.roc ]]; then
+	if [[ "${backend}" == luajit ]]; then
 		local luajit
 		luajit="$(resolve_luajit)"
 		cat <<META
 lang=Roc
-out_rel=lua/${script_base%.lua.roc}.lua
+out_rel=lua/${stem}.lua
 build_cmd='${roc}' build --target=luajit "\$JUMPSCRIPT_SCRIPT" --output="\$JUMPSCRIPT_ARTIFACT" >&2
 rebuild_mode=mtime
 exec_kind=lua
@@ -121,7 +141,7 @@ META
 	else
 		cat <<META
 lang=Roc
-out_rel=bin/${script_base%.roc}
+out_rel=bin/${stem}
 build_cmd='${roc}' build --opt=speed "\$JUMPSCRIPT_SCRIPT" --output="\$JUMPSCRIPT_ARTIFACT" >&2
 rebuild_mode=mtime
 exec_kind=bin
@@ -133,6 +153,14 @@ doctor() {
 	resolve_roc >/dev/null
 	echo "status=ok"
 }
+
+# Set by the Roc-luajit and Roc-wasm variant plugins.
+declared_backend=""
+case "${1:-}" in
+	--backend=native) shift ;;
+	--backend=luajit | --backend=wasm) declared_backend="${1#--backend=}"; shift ;;
+	--backend=*) echo "Roc plugin: unknown backend '${1#--backend=}' (native, luajit, wasm)" >&2; exit 1 ;;
+esac
 
 case "${1:-}" in
 	meta)

@@ -90,7 +90,7 @@ The `# nix:` header block is parsed as a Nix attrset and can contain:
 - Nim
 - Wat (WebAssembly Text)
 - MoonScript
-- Roc (`name.roc` native, `name.lua.roc` on LuaJIT, `name.wasm.roc` on wasmtime; needs a Roc compiler with the LuaJIT backend via `JUMPSCRIPT_ROC` or `roc` on PATH; `.wasm.roc` scripts are basic-cli 0.23.0 apps built against the WASI copy of basic-cli named by `JUMPSCRIPT_ROC_WASI_PLATFORM`)
+- Roc (`jumpscript Roc` native, `jumpscript Roc-luajit` on LuaJIT, `jumpscript Roc-wasm` on wasmtime, so extensionless scripts name their backend in the shebang; under plain `Roc` a `name.lua.roc` or `name.wasm.roc` double extension also selects the backend, and a named backend that contradicts it is an error; needs a Roc compiler with the LuaJIT backend via `JUMPSCRIPT_ROC` or `roc` on PATH; `.wasm.roc` scripts are basic-cli 0.23.0 apps built against the WASI copy of basic-cli named by `JUMPSCRIPT_ROC_WASI_PLATFORM`)
 
 ## CLI Reference
 

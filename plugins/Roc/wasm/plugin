@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# jumpscript Roc-wasm: the Roc plugin with the wasm backend declared, so an
+# extensionless script can name its backend in the shebang.
+exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../default/plugin" --backend=wasm "$@"
