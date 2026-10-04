@@ -62,7 +62,7 @@ Flags:
 
 When no flags are supplied, JumpScript boots the plugin’s flake-provided toolchains so scripts “just work.” Once you’ve installed the dependencies yourself, add the appropriate flags to get the faster, direct-exec path.
 
-A warm run (cached artifact, unchanged inputs) does not start the plugin at all: the runner caches each plugin's `meta` answer under `<cache root>/.meta`, keyed by the plugin directory's files, the script's path, mtime and size, the `--no-*` flags, `PATH` and every `JUMPSCRIPT_*` variable. A cached answer is also dropped when a dependency it declared changed or an absolute runtime path it names disappeared. A plugin whose answer depends on anything else should name that file in `deps`.
+A warm run (cached artifact, unchanged inputs) does not start the plugin at all: the runner caches each plugin's `meta` answer under `<cache root>/.meta`, keyed by the plugin directory's files, the script's path, mtime and size, the `--no-*` flags, `PATH` and every `JUMPSCRIPT_*` variable. A cached answer is also dropped when a dependency it declared changed or an absolute runtime path it names disappeared. A plugin whose answer depends on anything else should name that file in `deps`. Concurrent runs of the same script are safe: one builds while the others wait on the cache entry's lock, and cache directories are created at mode 700 in one step.
 
 On the first run JumpScript compiles the script, stores the binary in the cache, and executes it. Subsequent runs skip straight to execution until the script or any tracked dependency changes.
 

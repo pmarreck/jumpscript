@@ -172,15 +172,24 @@ fn mtimeNs(st: Io.File.Stat) i128 {
 }
 
 /// The runner's cache directories are private: an existing one must be
-/// mode 700, a missing one is created (with parents) and set to 700.
+/// mode 700, a missing one is created with its parents. The directory itself
+/// is created at mode 700 by mkdir, so a concurrent run never sees it with
+/// other permissions (mkdir followed by chmod left a window where it did).
 fn ensureSecureDir(ctx: Ctx, path: []const u8, comptime what: []const u8) void {
-	if (statPath(ctx, path)) |st| {
-		const mode = st.permissions.toMode() & 0o7777;
-		if (mode != secure_mode) ctx.die(1, what ++ " '{s}' has permissions {o}; expected 700", .{ path, mode });
-		return;
+	if (statPath(ctx, path) == null) {
+		if (std.fs.path.dirname(path)) |parent| ctx.cwd.createDirPath(ctx.io, parent) catch |e| ctx.die(1, "unable to create '{s}': {t}", .{ parent, e });
+		if (ctx.cwd.createDir(ctx.io, path, .fromMode(secure_mode))) {
+			// Normally a no-op; a umask that removes owner bits would leave less than 700.
+			ctx.cwd.setFilePermissions(ctx.io, path, .fromMode(secure_mode), .{}) catch |e| ctx.die(1, "unable to set permissions of '{s}': {t}", .{ path, e });
+			return;
+		} else |e| switch (e) {
+			error.PathAlreadyExists => {},
+			else => ctx.die(1, "unable to create '{s}': {t}", .{ path, e }),
+		}
 	}
-	ctx.cwd.createDirPath(ctx.io, path) catch |e| ctx.die(1, "unable to create '{s}': {t}", .{ path, e });
-	ctx.cwd.setFilePermissions(ctx.io, path, .fromMode(secure_mode), .{}) catch |e| ctx.die(1, "unable to set permissions of '{s}': {t}", .{ path, e });
+	const st = statPath(ctx, path) orelse ctx.die(1, "unable to determine permissions of '{s}'", .{path});
+	const mode = st.permissions.toMode() & 0o7777;
+	if (mode != secure_mode) ctx.die(1, what ++ " '{s}' has permissions {o}; expected 700", .{ path, mode });
 }
 
 /// A plugin's meta answer with the stamps (dependency mtimes) it was
@@ -244,19 +253,40 @@ fn run(base_ctx: Ctx, roots: Roots, r: core.Run) noreturn {
 	const artifact_dir = std.fs.path.dirname(artifact) orelse entry_dir;
 	if (!std.mem.eql(u8, artifact_dir, entry_dir)) ensureSecureDir(ctx, artifact_dir, "directory");
 
-	const artifact_mtime: ?i128 = if (statPath(ctx, artifact)) |st| (if (st.kind == .file) mtimeNs(st) else null) else null;
-	if (core.needsBuild(artifact_mtime, newest)) build(ctx, .{
-		.lang = tok.lang,
-		.meta = meta,
-		.entry_dir = entry_dir,
-		.artifact = artifact,
-		.script = script,
-		.script_dir = script_dir,
-		.deps = answer.deps,
-		.freshest = freshest,
-	});
+	// A fresh artifact needs no lock: it only becomes fresh when a build's
+	// final step stamps it. Otherwise one run builds while concurrent runs of
+	// the same entry wait on its lock, then find it fresh.
+	if (core.needsBuild(artifactMtime(ctx, artifact), newest)) {
+		const lock = lockEntry(ctx, entry_dir);
+		defer lock.close(ctx.io);
+		if (core.needsBuild(artifactMtime(ctx, artifact), newest)) build(ctx, .{
+			.lang = tok.lang,
+			.meta = meta,
+			.entry_dir = entry_dir,
+			.artifact = artifact,
+			.script = script,
+			.script_dir = script_dir,
+			.deps = answer.deps,
+			.freshest = freshest,
+		});
+	}
 
 	execute(ctx, tok.lang, meta, artifact, script, r.script_args);
+}
+
+fn artifactMtime(ctx: Ctx, artifact: []const u8) ?i128 {
+	const st = statPath(ctx, artifact) orelse return null;
+	return if (st.kind == .file) mtimeNs(st) else null;
+}
+
+/// An exclusive lock on the cache entry's `.lock` file, held while one run
+/// checks, builds and stamps the artifact; closing the file releases it,
+/// and so does the process exiting.
+fn lockEntry(ctx: Ctx, entry_dir: []const u8) Io.File {
+	const path = ctx.print("{s}/.lock", .{entry_dir});
+	const file = ctx.cwd.createFile(ctx.io, path, .{ .truncate = false }) catch |e| ctx.die(1, "unable to open lock '{s}': {t}", .{ path, e });
+	file.lock(ctx.io, .exclusive) catch |e| ctx.die(1, "unable to lock '{s}': {t}", .{ path, e });
+	return file;
 }
 
 /// Bash's `$(cd "$(dirname p)" && pwd)/$(basename p)` for a relative path:
@@ -388,13 +418,7 @@ fn cachedAnswer(ctx: Ctx, cache_file: []const u8) ?Answer {
 /// concurrent run never reads half an answer. Failure only costs the cache.
 fn storeAnswer(ctx: Ctx, meta_dir: []const u8, key: []const u8, stamps: []const core.Stamp, text: []const u8) void {
 	const body = core.renderMetaCache(ctx.arena, stamps, text) catch return;
-	var rnd: [8]u8 = undefined;
-	ctx.io.random(&rnd);
-	const tmp = ctx.print("{s}/{s}.{x}.tmp", .{ meta_dir, key, rnd });
-	ctx.cwd.writeFile(ctx.io, .{ .sub_path = tmp, .data = body }) catch return;
-	ctx.cwd.rename(tmp, ctx.cwd, ctx.print("{s}/{s}", .{ meta_dir, key }), ctx.io) catch {
-		ctx.cwd.deleteFile(ctx.io, tmp) catch {};
-	};
+	writeAtomically(ctx, ctx.print("{s}/{s}", .{ meta_dir, key }), body) catch {};
 }
 
 /// Runs `plugin meta <script>` with stdout captured and stderr passed
@@ -431,7 +455,20 @@ fn writeMetaEnv(ctx: Ctx, entry_dir: []const u8, m: core.Meta) void {
 	if (m.runtime_cmd.len > 0) text.print(ctx.arena, "runtime_cmd={s}\n", .{m.runtime_cmd}) catch oom();
 	if (m.deps.len > 0) text.print(ctx.arena, "deps={s}\n", .{m.deps}) catch oom();
 	const path = ctx.print("{s}/meta.env", .{entry_dir});
-	ctx.cwd.writeFile(ctx.io, .{ .sub_path = path, .data = text.items }) catch |e| ctx.die(1, "unable to write '{s}': {t}", .{ path, e });
+	writeAtomically(ctx, path, text.items) catch |e| ctx.die(1, "unable to write '{s}': {t}", .{ path, e });
+}
+
+/// Writes through a uniquely named temporary file and a rename, so readers
+/// and concurrent writers only ever see a whole file.
+fn writeAtomically(ctx: Ctx, path: []const u8, data: []const u8) !void {
+	var rnd: [8]u8 = undefined;
+	ctx.io.random(&rnd);
+	const tmp = ctx.print("{s}.{x}.tmp", .{ path, rnd });
+	try ctx.cwd.writeFile(ctx.io, .{ .sub_path = tmp, .data = data });
+	ctx.cwd.rename(tmp, ctx.cwd, path, ctx.io) catch |e| {
+		ctx.cwd.deleteFile(ctx.io, tmp) catch {};
+		return e;
+	};
 }
 
 const BuildRequest = struct {

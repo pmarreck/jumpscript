@@ -12,6 +12,7 @@
 | `src/main.zig` | Runner I/O adapter: plugin lookup, meta cache, secure cache dirs, build, exec. | Claude (2026-10-04) |
 | `tests/test_zig_core.sh` | Runs the core unit tests in ReleaseFast and Debug. | Claude (2026-10-04) |
 | `tests/test_meta_cache.sh` | When a cached plugin meta answer is reused or recomputed. | Claude (2026-10-04) |
+| `tests/test_concurrency.sh` | Concurrent cold runs: one build per cache entry, and cache directories never visible with other than mode 700. | Claude (2026-10-04) |
 | `tests/test_core_runner.sh` | Validates core runner plugin discovery error handling. | Codex (2025-10-27) |
 | `jumpscript` | Bootstrap CLI handling plugin version resolution. | Codex (2025-10-27) |
 | `tests/test_integration_c.sh` | Integration test for the C plugin through the runner. | Codex (2025-10-28) |
