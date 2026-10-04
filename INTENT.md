@@ -14,6 +14,8 @@ People who write small scripts in compiled or transpiled languages on a machine 
 - Editing a script (or a file it depends on) rebuilds it on the next run; an unchanged script runs from its cached build at close to the program's own speed.
 - Where the host already has the tools, `--no-build-deps`, `--no-runtime-deps` and `--no-deps` use them instead of Nix.
 - Scripts can be extensionless executables; the shebang names the language and, where a language has several backends, the backend.
+- A script can pin its own toolchain version for reproducibility; without a pin, the plugin's flake lock decides (BDFN, 2026-10-04).
+- After a script's first run has fetched its toolchain, later runs and rebuilds work without network access (BDFN, 2026-10-04).
 
 ## Scope and non-goals
 
@@ -23,18 +25,18 @@ People who write small scripts in compiled or transpiled languages on a machine 
 
 ## Constraints
 
-- Proposed from the purpose, not yet confirmed by BDFN: a plugin must not depend on host tools before Nix supplies them, apart from what the shebang workflow already needs (`env`, `bash`, `nix`).
+- A plugin must not depend on host tools before Nix supplies them, apart from what the shebang workflow already needs (`env`, `bash`, `nix`) (confirmed by BDFN, 2026-10-04).
 - The cache is private to the user (directories at mode 700) and safe under concurrent runs of the same script.
 
 ## How success is verified
 
 - `./test` is the complete entry point. Integration suites run each language's fixtures through the runner, several with `PATH` reduced to the Nix binary's directory and a few basic ones, so a plugin that relies on host tools fails.
 - The suites are run on Linux (x86_64) and macOS (aarch64).
+- Offline behavior is verified by running warm scripts with networking disabled (planned; see PLAN.md).
 
 ## Open questions
 
-- Toolchain pinning: should a script be able to pin a toolchain version for reproducibility, or is each plugin's flake lock the single pin?
-- Offline use: after first use, should runs work without network access (Nix substitutes already present), and should that be tested?
+- How a script declares its toolchain pin (syntax and granularity: a nixpkgs revision, a language version, or both).
 
 ## See also
 

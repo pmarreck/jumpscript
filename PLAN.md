@@ -3,6 +3,8 @@ Open work for jumpscript, highest priority first. Managed with the planning-work
 
 ## Now
 - [x] Plugin pins nixos-24.05 to nixos-26.05 (Zig 0.16, Lean 4.29, GCC 15, Rust 1.95); Zig fixtures ported to 0.16; Crystal held at 1.18; every suite but Roc passes on macOS aarch64 (done 2026-10-04 17:25 EDT) (context: docs/plan_context/macos.md)
+- [ ] Per-script toolchain pins: design how a script declares one (syntax; nixpkgs revision and/or language version) with BDFN, then implement (INTENT.md)
+- [ ] Offline runs: a warm script runs and rebuilds with networking disabled; add a test that runs it in a network namespace, and fix what needs the network (INTENT.md)
 - [ ] Crystal: return from crystal_1_18 to the default once Crystal fixes its overflow on machines with 128 or more CPUs (context: docs/plan_context/macos.md)
 - [ ] Roc plugin procures its compiler through Nix (the roc_luajit flake) and builds the WASI basic-cli platform on demand; JUMPSCRIPT_ROC and JUMPSCRIPT_ROC_WASI_PLATFORM become optional overrides (INTENT.md)
 - [x] Plugins need only nix and bash before their flakes take over: pure-Bash helpers in plugins/_lib, tests run plugins with a PATH of just nix and bash, Moon gets Lua from its flake (done 2026-10-04 17:01 EDT)
