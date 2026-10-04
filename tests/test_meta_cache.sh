@@ -68,24 +68,31 @@ PATH="${PATH}:/nonexistent-dir" expect "PATH change" "fake v1 0" 3 1 -- Fake "${
 expect "--no-runtime-deps is a separate answer" "fake v1 0" 4 1 -- --no-runtime-deps Fake "${script}"
 expect "and it is cached too" "fake v1 0" 4 1 -- --no-runtime-deps Fake "${script}"
 
-sleep_free_touch() { touch -d "@$1" "$2"; }
-sleep_free_touch 1700000000 "${plugins}/Fake/default/plugin"
+# Sets a file's mtime to an epoch second with POSIX touch -t. The time is
+# formatted by GNU date (-d @N) or BSD date (-r N), whichever this date is;
+# a machine can mix GNU date with BSD touch.
+set_mtime() {
+	local stamp
+	stamp="$(date -d "@$1" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$1" +%Y%m%d%H%M.%S)"
+	touch -t "${stamp}" "$2"
+}
+set_mtime 1700000000 "${plugins}/Fake/default/plugin"
 expect "a changed plugin file reruns meta" "fake v1 0" 5 1 -- Fake "${script}"
 echo "extra" > "${plugins}/Fake/default/flake.nix"
 expect "a new file in the plugin directory reruns meta" "fake v1 0" 6 1 -- Fake "${script}"
 
 echo "v2" > "${script}"
-sleep_free_touch 1800000000 "${script}"
+set_mtime 1800000000 "${script}"
 expect "an edited script reruns meta and rebuilds" "fake v2 0" 7 2 -- Fake "${script}"
 
 echo "helper" > "${tmp_root}/scripts/helper"
-sleep_free_touch 1800000000 "${tmp_root}/scripts/helper"
+set_mtime 1800000000 "${tmp_root}/scripts/helper"
 echo "helper" > "${state}/deps"
 expect "declared deps are answered by a new meta" "fake v2 0" 7 2 -- Fake "${script}"
-touch -d "@1800000001" "${script}"
+set_mtime 1800000001 "${script}"
 expect "script touched again" "fake v2 0" 8 3 -- Fake "${script}"
 expect "deps cached with the answer" "fake v2 0" 8 3 -- Fake "${script}"
-touch -d "@1900000000" "${tmp_root}/scripts/helper"
+set_mtime 1900000000 "${tmp_root}/scripts/helper"
 expect "a changed dependency reruns meta and rebuilds" "fake v2 0" 9 4 -- Fake "${script}"
 
 # A cached absolute runtime path that vanished (say, garbage-collected from
@@ -94,7 +101,7 @@ rt1="${tmp_root}/rt1"
 printf '#!/usr/bin/env bash\nexec bash "$@"\n' > "${rt1}"
 chmod +x "${rt1}"
 echo "${rt1}" > "${state}/runtime_path"
-touch -d "@1900000001" "${script}"
+set_mtime 1900000001 "${script}"
 expect "text runtime" "fake v2 0" 10 5 -- Fake "${script}"
 expect "text runtime cached" "fake v2 0" 10 5 -- Fake "${script}"
 rt2="${tmp_root}/rt2"
@@ -104,7 +111,7 @@ expect "a vanished runtime reruns meta" "fake v2 0" 11 5 -- Fake "${script}"
 
 # A failed meta call is reported and never cached.
 touch "${state}/fail_meta"
-touch -d "@1900000002" "${script}"
+set_mtime 1900000002 "${script}"
 out="$(run Fake "${script}")"
 status=$?
 [[ ${status} -eq 3 && "$(cat "${tmp_root}/err")" == *"meta refused"* ]] || fail "failed meta: status ${status}, stderr '$(cat "${tmp_root}/err")'"

@@ -22,6 +22,8 @@
 	- C, C++, Crystal, D, Nim, Rust, Zig, Idris, Moon, and Wat plugins now stream originals (or transient sanitized copies) without persistent staging; matching tests assert metadata no longer references `source.*` intermediates.
 
 ## TODO
+000. **macOS (aarch64-darwin) plugin suites (found 2026-10-04)**
+	- On a Nix-equipped macOS aarch64 machine the runner builds and passes its own suites (core, core runner, meta cache, concurrency, CLI help, repo clean, user plugin precedence, direnv), but the language integration suites fail there with the old Bash runner too: tests restrict PATH to directories that lack `dirname` on macOS, and the C/C++ builds abort (exit 134). Roc needs a compiler on that machine.
 00. **Remove runner races (BDFN 2026-10-04; races done)**; then build and run the suite on macOS aarch64 (a Nix-equipped Mac)
 	- Concurrent runs of one script: one build per cache entry (an exclusive lock around check, build and stamp, with a re-check after acquiring it), cache directories created at mode 700 atomically instead of mkdir-then-chmod, and meta.env written atomically. A shell test starts several cold runs at once and asserts one build, correct output from all, and no permission errors.
 0. **Zig runner (done 2026-10-04)**
