@@ -2,8 +2,8 @@
 Open work for jumpscript, highest priority first. Managed with the planning-work routine: completed items retire to docs/PLAN_LOG.md, background lives in docs/plan_context/ (start with project_overview.md).
 
 ## Now
-- [ ] macOS aarch64: plugins must work before Nix supplies tools (no host dirname), and the C/C++ builds abort with exit 134 (context: docs/plan_context/macos.md)
-- [ ] Update plugin flake pins (nixpkgs inputs such as nixos-24.05, and any pinned language versions) to current releases; rerun every suite on Linux and macOS
+- [x] Plugin pins nixos-24.05 to nixos-26.05 (Zig 0.16, Lean 4.29, GCC 15, Rust 1.95); Zig fixtures ported to 0.16; Crystal held at 1.18; every suite but Roc passes on macOS aarch64 (done 2026-10-04 17:25 EDT) (context: docs/plan_context/macos.md)
+- [ ] Crystal: return from crystal_1_18 to the default once Crystal fixes its overflow on machines with 128 or more CPUs (context: docs/plan_context/macos.md)
 - [ ] Roc plugin procures its compiler through Nix (the roc_luajit flake) and builds the WASI basic-cli platform on demand; JUMPSCRIPT_ROC and JUMPSCRIPT_ROC_WASI_PLATFORM become optional overrides (INTENT.md)
 - [x] Plugins need only nix and bash before their flakes take over: pure-Bash helpers in plugins/_lib, tests run plugins with a PATH of just nix and bash, Moon gets Lua from its flake (done 2026-10-04 17:01 EDT)
 - [x] Run the runner's own suites on macOS aarch64; portable mtimes in test_meta_cache (done 2026-10-04 16:13 EDT, b8941ad)
@@ -30,6 +30,5 @@ Open work for jumpscript, highest priority first. Managed with the planning-work
 - [ ] Elixir daemon: lifecycle (jumpscript elixir start|stop|status), socket permissions, key-based caching, IO streaming
 
 ## Earlier completions
-- [x] D module dependency tracking (done 2025-11-05)
 - [x] Zig import dependency tracking (done 2025-11-05)
 - [x] Lean module cache invalidation via reported .lean dependencies (done 2025-11-05)

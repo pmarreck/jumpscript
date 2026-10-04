@@ -5,6 +5,7 @@
 set -u
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${repo_root}/tests/lib/host.bash"
 runner="${repo_root}/bin/jumpscript"
 failures=0
 fail() { echo "FAIL: $*" >&2; failures=$((failures + 1)); }
@@ -68,14 +69,6 @@ PATH="${PATH}:/nonexistent-dir" expect "PATH change" "fake v1 0" 3 1 -- Fake "${
 expect "--no-runtime-deps is a separate answer" "fake v1 0" 4 1 -- --no-runtime-deps Fake "${script}"
 expect "and it is cached too" "fake v1 0" 4 1 -- --no-runtime-deps Fake "${script}"
 
-# Sets a file's mtime to an epoch second with POSIX touch -t. The time is
-# formatted by GNU date (-d @N) or BSD date (-r N), whichever this date is;
-# a machine can mix GNU date with BSD touch.
-set_mtime() {
-	local stamp
-	stamp="$(date -d "@$1" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$1" +%Y%m%d%H%M.%S)"
-	touch -t "${stamp}" "$2"
-}
 set_mtime 1700000000 "${plugins}/Fake/default/plugin"
 expect "a changed plugin file reruns meta" "fake v1 0" 5 1 -- Fake "${script}"
 echo "extra" > "${plugins}/Fake/default/flake.nix"

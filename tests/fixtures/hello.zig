@@ -2,13 +2,13 @@
 
 const std = @import("std");
 
-pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
-    try stdout.print("Zig integration OK\n", .{});
+pub fn main(init: std.process.Init) !void {
+	var buf: [256]u8 = undefined;
+	var stdout = std.Io.File.stdout().writer(init.io, &buf);
+	const out = &stdout.interface;
+	try out.print("Zig integration OK\n", .{});
 
-    const args = std.os.argv;
-    if (args.len > 1) {
-        const first = std.mem.span(args[1]);
-        try stdout.print("arg={s}\n", .{first});
-    }
+	const args = try init.minimal.args.toSlice(init.arena.allocator());
+	if (args.len > 1) try out.print("arg={s}\n", .{args[1]});
+	try out.flush();
 }

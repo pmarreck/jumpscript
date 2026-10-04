@@ -115,7 +115,7 @@ test_c_plugin_rebuilds_when_header_changes() {
 EOF
 
 	future_epoch="$(($(date +%s) + 5))"
-	touch -m -d "@${future_epoch}" "${header_path}"
+	set_mtime "${future_epoch}" "${header_path}"
 
 	second_output="$(
 		JUMPSCRIPT_CACHE="${cache_root}" \

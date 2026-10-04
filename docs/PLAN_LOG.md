@@ -10,3 +10,4 @@ Completed PLAN.md items retired by plan-retire, oldest retirement first.
 - [x] [Earlier completions] User plugin search path ${JUMPSCRIPT_USER_PLUGINS} ahead of bundled plugins (done 2025-10-29)
 - [x] [Earlier completions] Lean 4 native build through a Lake scaffold (done 2025-10-29)
 - [x] [Earlier completions] Direct compile pipeline: C, C++, Crystal, D, Nim, Rust, Zig, Idris, Moon and Wat plugins stream originals without persistent staging (done 2025-11-05)
+- [x] [Earlier completions] D module dependency tracking (done 2025-11-05)

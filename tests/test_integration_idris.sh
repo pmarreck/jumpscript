@@ -102,7 +102,7 @@ message = "Idris import v2"
 EOF
 
 	future_epoch="$(($(date +%s) + 5))"
-	touch -m -d "@${future_epoch}" "${helper_path}"
+	set_mtime "${future_epoch}" "${helper_path}"
 
 	second_output="$(
 		JUMPSCRIPT_CACHE="${cache_root}" \
