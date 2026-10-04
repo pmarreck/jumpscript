@@ -5,7 +5,7 @@ Jumpscript enables edit-run workflows for compiled/transpiled languages by cachi
 
 ## Constraints
 - MVP targets Linux/macOS with Nix installed.
-- Core runner stays in Bash for bootstrapping; feature-complete `jumpscript` binary will ultimately be produced via a Zig-based build.
+- The runner is a Zig binary (`src/core.zig` pure decisions, `src/main.zig` I/O), built by `./build` into `bin/jumpscript` or packaged by the root flake. It replaced the original Bash runner (2026-10-04), whose behavior the shell suite still pins.
 - Rebuild policy is mtime-only for now; hashing modes deferred until needed.
 - Plugin layout: `plugins/<Language>/<version>/` with `default/` fallback. CLI accepts `<Language>-<version>` tokens.
 - WAT support via wazero is a required new plugin.

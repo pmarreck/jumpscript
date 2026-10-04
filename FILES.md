@@ -3,7 +3,15 @@
 | Path | Purpose | Created By |
 | --- | --- | --- |
 | `PROJECT_PLAN.md` | High-level roadmap and constraints for Jumpscript rebuild. | Codex (2025-10-27) |
-| `test` | Unified entrypoint to run all unit tests. | Codex (2025-10-27) |
+| `test` | Unified entrypoint: builds `bin/jumpscript`, runs every suite, reports all failures. | Codex (2025-10-27) |
+| `build` | Builds the Zig runner into `bin/jumpscript` (ReleaseFast; `--debug`, `--test`). | Claude (2026-10-04) |
+| `build.zig` | Zig build: the `jumpscript` executable and the core unit tests. | Claude (2026-10-04) |
+| `build.zig.zon` | Zig package manifest (Zig 0.16). | Claude (2026-10-04) |
+| `flake.nix` | Dev shell (Zig 0.16), `packages.default` (runner plus plugins) and `checks`. | Claude (2026-10-04) |
+| `src/core.zig` | Runner core without I/O: argv, meta parsing and validation, cache keys, staleness, runtime expansion, meta-cache key and file format. | Claude (2026-10-04) |
+| `src/main.zig` | Runner I/O adapter: plugin lookup, meta cache, secure cache dirs, build, exec. | Claude (2026-10-04) |
+| `tests/test_zig_core.sh` | Runs the core unit tests in ReleaseFast and Debug. | Claude (2026-10-04) |
+| `tests/test_meta_cache.sh` | When a cached plugin meta answer is reused or recomputed. | Claude (2026-10-04) |
 | `tests/test_core_runner.sh` | Validates core runner plugin discovery error handling. | Codex (2025-10-27) |
 | `jumpscript` | Bootstrap CLI handling plugin version resolution. | Codex (2025-10-27) |
 | `tests/test_integration_c.sh` | Integration test for the C plugin through the runner. | Codex (2025-10-28) |

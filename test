@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# The complete test entry point: builds bin/jumpscript, then runs every
+# suite, reporting all failures and exiting non-zero if any failed.
+set -u
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 tests=(
 	"tests/test_zig_core.sh"
 	"tests/test_core_runner.sh"
+	"tests/test_meta_cache.sh"
 	"tests/test_integration_c.sh"
 	"tests/test_integration_moon.sh"
 	"tests/test_integration_wat.sh"
@@ -26,7 +29,19 @@ tests=(
 	"tests/test_user_plugin_precedence.sh"
 )
 
+if ! build_log="$("${repo_root}/build" 2>&1)"; then
+	printf "%s\n" "${build_log}" >&2
+	echo "FAIL: ./build" >&2
+	exit 1
+fi
+
+failed=()
 for test_file in "${tests[@]}"; do
 	echo "Running ${test_file}..."
-	"${repo_root}/${test_file}"
+	"${repo_root}/${test_file}" || failed+=("${test_file}")
 done
+if [[ ${#failed[@]} -ne 0 ]]; then
+	echo "FAILED: ${failed[*]}" >&2
+	exit 1
+fi
+echo "All suites passed."

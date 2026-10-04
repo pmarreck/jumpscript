@@ -5,11 +5,16 @@ JumpScript turns compiled languages into fast-launching scripts. It builds on fi
 ## Installation
 
 1. Make sure you have [Nix](https://nixos.org/download.html) installed.
-2. Clone this repository:
+2. Either install the packaged runner with its bundled plugins:
    ```bash
-   git clone https://github.com/yourusername/jumpscript.git
+   nix profile install github:pmarreck/jumpscript
    ```
-3. Add the repository `bin/` directory to your PATH so the `jumpscript` launcher and bundled helper tools are discoverable. If you use [direnv](https://direnv.net/), allow the bundled `.envrc` to prepend the path automatically:
+   or clone this repository and build the runner, a small Zig binary, into `bin/jumpscript`:
+   ```bash
+   git clone https://github.com/pmarreck/jumpscript.git
+   cd jumpscript && ./build
+   ```
+3. For a clone, add the repository `bin/` directory to your PATH so the `jumpscript` launcher and bundled helper tools are discoverable. If you use [direnv](https://direnv.net/), allow the bundled `.envrc` to prepend the path automatically:
    ```bash
    cd jumpscript
    direnv allow   # optional; keeps PATH scoped to this repo
@@ -56,6 +61,8 @@ Flags:
 - `--no-deps` – shorthand for both of the above.
 
 When no flags are supplied, JumpScript boots the plugin’s flake-provided toolchains so scripts “just work.” Once you’ve installed the dependencies yourself, add the appropriate flags to get the faster, direct-exec path.
+
+A warm run (cached artifact, unchanged inputs) does not start the plugin at all: the runner caches each plugin's `meta` answer under `<cache root>/.meta`, keyed by the plugin directory's files, the script's path, mtime and size, the `--no-*` flags, `PATH` and every `JUMPSCRIPT_*` variable. A cached answer is also dropped when a dependency it declared changed or an absolute runtime path it names disappeared. A plugin whose answer depends on anything else should name that file in `deps`.
 
 On the first run JumpScript compiles the script, stores the binary in the cache, and executes it. Subsequent runs skip straight to execution until the script or any tracked dependency changes.
 

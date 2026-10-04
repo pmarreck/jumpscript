@@ -9,7 +9,11 @@ hide=[
 ]
 
 annotate=[
+	build = Builds the Zig runner into bin/jumpscript
 	build.zig = Zig build: core unit tests (zig build test); default ReleaseFast
+	flake.nix = Dev shell, packages.default (runner plus plugins), checks
 	src/core.zig = Zig runner pure core: argv parsing, meta parse/validate, out_rel containment, runtime expansion, deps, cache entry key, staleness, meta-cache key and file format
+	src/main.zig = Zig runner I/O adapter: plugin lookup, meta cache, secure cache dirs, build, exec
+	tests/test_meta_cache.sh = When a cached plugin meta answer is reused or recomputed
 	tests/test_zig_core.sh = Runs the Zig core unit tests in ReleaseFast and Debug
 ]
