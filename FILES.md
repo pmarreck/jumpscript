@@ -2,7 +2,9 @@
 
 | Path | Purpose | Created By |
 | --- | --- | --- |
-| `PROJECT_PLAN.md` | High-level roadmap and constraints for Jumpscript rebuild. | Codex (2025-10-27) |
+| `PLAN.md` | Open work in priority order (planning-work format); replaced PROJECT_PLAN.md and NEXT_STEPS.md. | Claude (2026-10-04) |
+| `docs/PLAN_LOG.md` | Retired plan items, append-only, with section paths. | Claude (2026-10-04) |
+| `docs/plan_context/` | Background for plan items: project overview and constraints, Zig runner, macOS suites, Nix env delta caching. | Claude (2026-10-04) |
 | `test` | Unified entrypoint: builds `bin/jumpscript`, runs every suite, reports all failures. | Codex (2025-10-27) |
 | `build` | Builds the Zig runner into `bin/jumpscript` (ReleaseFast; `--debug`, `--test`). | Claude (2026-10-04) |
 | `build.zig` | Zig build: the `jumpscript` executable and the core unit tests. | Claude (2026-10-04) |

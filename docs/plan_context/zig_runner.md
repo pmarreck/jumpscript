@@ -1,0 +1,8 @@
+# Zig runner (done 2026-10-04)
+
+- Replaced the Bash `bin/jumpscript` with a Zig binary: a pure core (argument parsing, meta parsing and validation, cache keys, staleness, runtime command expansion, meta-cache keying) and a Zig I/O adapter (stat, mkdir, spawn, exec). Same CLI, plugin contract, cache layout and error messages; the existing shell suite is the behavioral oracle.
+- Plugin `meta` output is cached so a warm run starts only the program. The key covers the plugin directory's files (names, mtimes, sizes), the script path, mtime and size, the `--no-*` flags, `PATH` and every `JUMPSCRIPT_*` variable. A cached entry is also invalid when a declared dependency's mtime changed or an absolute runtime path no longer exists.
+- Staleness compares nanosecond mtimes (the Bash runner compared whole seconds, so two edits within one second could reuse a stale build).
+- Measured: a warm run took 180 ms (the program 0.5 ms, the plugin's meta 18 ms, the rest about 50 process launches in the Bash runner); now 1.1 ms with the program 0.5 ms of it (54 syscalls). `main` takes `Init.Minimal` because building Zig's environment map cost more than the rest of the run.
+- Races removed: one build per cache entry (an exclusive lock on the entry's `.lock` with a re-check after acquiring it), cache directories created at mode 700 by mkdir itself, and atomic writes for `meta.env` and meta-cache files. `tests/test_concurrency.sh` pins both.
+- Known remaining case: two edits within one second share a cache entry, so a run executing the artifact can have it rewritten in place by another run's rebuild.
