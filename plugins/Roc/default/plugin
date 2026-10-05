@@ -19,28 +19,41 @@ plugin's variant directory, or else from the script's double extension:
   jumpscript Roc (any other name)          roc build --opt=speed, run natively
 Extensionless scripts therefore name their backend in the shebang. A named
 backend that contradicts the double extension is an error.
-The compiler is $JUMPSCRIPT_ROC, else `roc` on PATH (a Roc build with the
-LuaJIT backend is needed for .lua.roc scripts).
+The compiler is Roc with the LuaJIT backend, from the roc_luajit flake this
+plugin pins (built on first use); $JUMPSCRIPT_ROC overrides it, and
+--no-build-deps uses `roc` on PATH.
 
-A .wasm.roc script is a basic-cli 0.23.0 app. It builds against a WASI copy
-of basic-cli: $JUMPSCRIPT_ROC_WASI_PLATFORM names the directory holding its
-main.roc (roc_luajit's luajit_backend/platforms/wasi_basic_cli/build makes
-one). It runs with the whole filesystem preopened and the environment
-inherited, as a native terminal app would.
+A wasm script is a basic-cli 0.23.0 app. It builds against the WASI copy of
+basic-cli from the same flake ($JUMPSCRIPT_ROC_WASI_PLATFORM, a directory
+holding its main.roc, overrides it) and runs with the whole filesystem
+preopened and the environment inherited, as a native terminal app would.
 USAGE
 }
 
 # The Roc compiler to build with: JUMPSCRIPT_ROC, else roc on PATH.
 resolve_roc() {
-	local roc="${JUMPSCRIPT_ROC:-}"
-	if [[ -z "${roc}" ]]; then
-		roc="$(command -v roc || true)"
+	if [[ -n "${JUMPSCRIPT_ROC:-}" ]]; then
+		if [[ ! -x "${JUMPSCRIPT_ROC}" ]]; then
+			echo "Roc plugin: JUMPSCRIPT_ROC is not an executable Roc compiler (got '${JUMPSCRIPT_ROC}')" >&2
+			exit 1
+		fi
+		printf '%s\n' "${JUMPSCRIPT_ROC}"
+		return
 	fi
-	if [[ -z "${roc}" || ! -x "${roc}" ]]; then
-		echo "Roc plugin needs a Roc compiler: set JUMPSCRIPT_ROC or put roc on PATH (got '${roc}')" >&2
-		exit 1
+	if [[ "${JUMPSCRIPT_NO_BUILD_DEPS:-0}" == "1" ]]; then
+		local host
+		host="$(command -v roc || true)"
+		if [[ -z "${host}" ]]; then
+			echo "Roc plugin requires 'roc' on PATH when --no-build-deps is set" >&2
+			exit 1
+		fi
+		printf '%s\n' "${host}"
+		return
 	fi
-	printf '%s\n' "${roc}"
+	# Roc with the LuaJIT backend, from the roc_luajit flake this plugin pins.
+	local store
+	store="$(nix build --no-link --print-out-paths "${plugin_dir}#roc")"
+	printf '%s\n' "${store}/bin/roc"
 }
 
 resolve_luajit() {
@@ -80,8 +93,13 @@ resolve_wasmtime() {
 # as an absolute directory.
 resolve_wasi_platform() {
 	local dir="${JUMPSCRIPT_ROC_WASI_PLATFORM:-}"
-	if [[ -z "${dir}" || ! -f "${dir}/main.roc" ]]; then
-		echo "Roc plugin needs a WASI basic-cli platform for .wasm.roc: set JUMPSCRIPT_ROC_WASI_PLATFORM to the directory holding its main.roc (got '${dir}')" >&2
+	if [[ -z "${dir}" ]]; then
+		# The WASI copy of basic-cli 0.23.0, built by the roc_luajit flake.
+		nix build --no-link --print-out-paths "${plugin_dir}#wasi-basic-cli"
+		return
+	fi
+	if [[ ! -f "${dir}/main.roc" ]]; then
+		echo "Roc plugin: JUMPSCRIPT_ROC_WASI_PLATFORM must name a directory holding the WASI basic-cli platform's main.roc (got '${dir}')" >&2
 		exit 1
 	fi
 	(cd "${dir}" && pwd)

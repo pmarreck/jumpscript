@@ -6,7 +6,7 @@ Open work for jumpscript, highest priority first. Managed with the planning-work
 - [ ] Per-script toolchain pins: design how a script declares one (syntax; nixpkgs revision and/or language version) with BDFN, then implement (INTENT.md)
 - [ ] Offline runs: a warm script runs and rebuilds with networking disabled; add a test that runs it in a network namespace, and fix what needs the network (INTENT.md)
 - [ ] Crystal: return from crystal_1_18 to the default once Crystal fixes its overflow on machines with 128 or more CPUs (context: docs/plan_context/macos.md)
-- [ ] Roc plugin procures its compiler through Nix (the roc_luajit flake) and builds the WASI basic-cli platform on demand; JUMPSCRIPT_ROC and JUMPSCRIPT_ROC_WASI_PLATFORM become optional overrides (INTENT.md)
+- [x] Roc plugin procures its compiler and the WASI basic-cli platform from the roc_luajit flake; JUMPSCRIPT_ROC and JUMPSCRIPT_ROC_WASI_PLATFORM are optional overrides; every suite passes on Linux and macOS aarch64 with only nix and bash on PATH (done 2026-10-04 23:35 EDT) (context: docs/plan_context/macos.md)
 - [x] Plugins need only nix and bash before their flakes take over: pure-Bash helpers in plugins/_lib, tests run plugins with a PATH of just nix and bash, Moon gets Lua from its flake (done 2026-10-04 17:01 EDT)
 - [x] Run the runner's own suites on macOS aarch64; portable mtimes in test_meta_cache (done 2026-10-04 16:13 EDT, b8941ad)
 - [x] Remove runner races: one build per cache entry, cache dirs created at mode 700, atomic meta.env and meta-cache writes (done 2026-10-04 16:07 EDT, 7a1f437) (context: docs/plan_context/zig_runner.md)
@@ -32,5 +32,4 @@ Open work for jumpscript, highest priority first. Managed with the planning-work
 - [ ] Elixir daemon: lifecycle (jumpscript elixir start|stop|status), socket permissions, key-based caching, IO streaming
 
 ## Earlier completions
-- [x] Zig import dependency tracking (done 2025-11-05)
 - [x] Lean module cache invalidation via reported .lean dependencies (done 2025-11-05)

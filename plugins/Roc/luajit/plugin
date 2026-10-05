@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 # jumpscript Roc-luajit: the Roc plugin with the luajit backend declared, so an
 # extensionless script can name its backend in the shebang.
-exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../default/plugin" --backend=luajit "$@"
+exec "${BASH_SOURCE[0]%/*}/../default/plugin" --backend=luajit "$@"

@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Roc plugin: the double extension picks the backend (name.lua.roc -> LuaJIT,
-# name.roc -> native). The compiler is JUMPSCRIPT_ROC or `roc` on PATH; it
-# must be a Roc build with the LuaJIT backend for .lua.roc scripts.
+# Roc plugin: the shebang token or the double extension picks the backend
+# (native, LuaJIT, wasm). The compiler (Roc with the LuaJIT backend) and the
+# WASI basic-cli platform come from the plugin's flake; JUMPSCRIPT_ROC and
+# JUMPSCRIPT_ROC_WASI_PLATFORM override them. Real runs use a PATH holding
+# only nix and bash, so nothing Roc-related may come from the host.
 set -u
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${repo_root}/tests/lib/host.bash"
 runner="${repo_root}/bin/jumpscript"
 plugin="${repo_root}/plugins/Roc/default/plugin"
 failures=0
@@ -13,22 +16,13 @@ fail() { echo "FAIL: $*" >&2; failures=$((failures + 1)); }
 tmp_root="$(mktemp -d)"
 trap 'rm -rf "${tmp_root}"' EXIT
 
-roc_bin="${JUMPSCRIPT_ROC:-$(command -v roc || true)}"
-if [[ -z "${roc_bin}" || ! -x "${roc_bin}" ]]; then
-	echo "FAIL: Roc integration test needs a Roc compiler (set JUMPSCRIPT_ROC or put roc on PATH)" >&2
-	exit 1
-fi
+unset JUMPSCRIPT_ROC JUMPSCRIPT_ROC_WASI_PLATFORM
+host_dir="$(minimal_host_dir "${tmp_root}" "$(command -v nix)")"
 stub_roc="${tmp_root}/stub-roc"
-printf '#!/usr/bin/env sh\nexit 0\n' > "${stub_roc}"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${stub_roc}"
 chmod +x "${stub_roc}"
 
-# .wasm.roc scripts build against a WASI copy of basic-cli 0.23.0 (a
-# directory holding its main.roc), named by JUMPSCRIPT_ROC_WASI_PLATFORM.
-wasi_platform="${JUMPSCRIPT_ROC_WASI_PLATFORM:-}"
-if [[ -z "${wasi_platform}" || ! -f "${wasi_platform}/main.roc" ]]; then
-	echo "FAIL: Roc integration test needs a WASI basic-cli platform directory in JUMPSCRIPT_ROC_WASI_PLATFORM (got '${wasi_platform}')" >&2
-	exit 1
-fi
+basic_cli_url="https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst"
 stub_platform="${tmp_root}/stub-platform"
 mkdir -p "${stub_platform}"
 : > "${stub_platform}/main.roc"
@@ -82,7 +76,6 @@ for spec in "default:hello:bin/hello" "luajit:hello:lua/hello.lua" "luajit:hello
 	[[ "$(meta_field "${meta}" out_rel)" == "${want}" ]] || fail "Roc-${variant} ${name}: out_rel want '${want}': ${meta}"
 done
 
-basic_cli_url="https://github.com/roc-lang/basic-cli/releases/download/0.23.0/GNN5tt2gKdX4dhawg4915C4YB193woHFdcCkz31fhGxv.tar.zst"
 meta="$(JUMPSCRIPT_ROC="${stub_roc}" JUMPSCRIPT_ROC_WASI_PLATFORM="${stub_platform}" "${plugin}" meta /scripts/hello.wasm.roc)"
 build_cmd="$(meta_field "${meta}" build_cmd)"
 [[ "${build_cmd}" == *"--target=wasm32"* ]] || fail "wasm.roc build must target wasm32: ${meta}"
@@ -90,29 +83,35 @@ build_cmd="$(meta_field "${meta}" build_cmd)"
 [[ "$(meta_field "${meta}" out_rel)" == "wasm/hello.wasm" ]] || fail "wasm.roc out_rel: ${meta}"
 [[ "$(meta_field "${meta}" runtime_cmd)" == *"wasmtime run -S inherit-env=y --dir=/ {{artifact}}" ]] || fail "wasm.roc runtime: ${meta}"
 
-# Without a WASI platform, .wasm.roc is a clear error, never a native build.
-for platform in "" "${tmp_root}/no-such-platform"; do
-	err="$(JUMPSCRIPT_ROC="${stub_roc}" JUMPSCRIPT_ROC_WASI_PLATFORM="${platform}" "${plugin}" meta /scripts/hello.wasm.roc 2>&1 >/dev/null)"
-	status=$?
-	[[ ${status} -ne 0 && "${err}" == *"JUMPSCRIPT_ROC_WASI_PLATFORM"* ]] || fail "wasm.roc without platform '${platform}': status ${status}, stderr '${err}'"
-done
+# By default the compiler and the WASI platform are the flake's (store paths).
+meta="$(PATH="${host_dir}" "${plugin}" meta /scripts/hello.wasm.roc 2>"${tmp_root}/flake.err")"
+build_cmd="$(meta_field "${meta}" build_cmd)"
+[[ "${build_cmd}" == "'/nix/store/"*"/bin/roc' build --target=wasm32"* ]] || fail "default compiler must be the flake's roc: '${build_cmd}' ($(cat "${tmp_root}/flake.err"))"
+[[ "${build_cmd}" == *"--replace-dep ${basic_cli_url} '/nix/store/"*"wasi-basic-cli"*"/main.roc'"* ]] || fail "default WASI platform must be the flake's: '${build_cmd}'"
 
-# A missing compiler is a clear error, not a silent default.
+# An override that does not exist is a clear error, never a fallback.
+err="$(JUMPSCRIPT_ROC="${stub_roc}" JUMPSCRIPT_ROC_WASI_PLATFORM="${tmp_root}/no-such-platform" "${plugin}" meta /scripts/hello.wasm.roc 2>&1 >/dev/null)"
+status=$?
+[[ ${status} -ne 0 && "${err}" == *"JUMPSCRIPT_ROC_WASI_PLATFORM"* ]] || fail "missing platform override: status ${status}, stderr '${err}'"
 err="$(JUMPSCRIPT_ROC="${tmp_root}/no-such-roc" "${plugin}" meta /scripts/hello.roc 2>&1 >/dev/null)"
 status=$?
-[[ ${status} -ne 0 && "${err}" == *"JUMPSCRIPT_ROC"* ]] || fail "missing compiler: status ${status}, stderr '${err}'"
+[[ ${status} -ne 0 && "${err}" == *"JUMPSCRIPT_ROC"* ]] || fail "missing compiler override: status ${status}, stderr '${err}'"
+# --no-build-deps means the host's roc; without one on PATH that is an error.
+err="$(PATH="${host_dir}" JUMPSCRIPT_NO_BUILD_DEPS=1 "${plugin}" meta /scripts/hello.roc 2>&1 >/dev/null)"
+status=$?
+[[ ${status} -ne 0 && "${err}" == *"roc"* && "${err}" == *"--no-build-deps"* ]] || fail "no-build-deps without host roc: status ${status}, stderr '${err}'"
 
 # Real builds: run, then rerun from the cache with a compiler that would fail.
 broken_roc="${tmp_root}/broken-roc"
-printf '#!/usr/bin/env sh\necho "roc should not rerun" >&2\nexit 125\n' > "${broken_roc}"
+printf '#!/usr/bin/env bash\necho "roc should not rerun" >&2\nexit 125\n' > "${broken_roc}"
 chmod +x "${broken_roc}"
 for script in hello.lua.roc hello.roc hello.wasm.roc; do
 	dir="${tmp_root}/${script}.d"
 	mkdir -p "${dir}"
 	cp "${repo_root}/tests/fixtures/${script}" "${dir}/${script}"
-	out="$(JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${roc_bin}" JUMPSCRIPT_ROC_WASI_PLATFORM="${wasi_platform}" "${runner}" run --no-runtime-deps Roc "${dir}/${script}" a b c 2>"${dir}/err")"
+	out="$(PATH="${host_dir}" JUMPSCRIPT_CACHE="${dir}/cache" "${runner}" run Roc "${dir}/${script}" a b c 2>"${dir}/err")"
 	[[ "${out}" == *"Roc hello 3"* ]] || fail "${script}: output '${out}', stderr $(cat "${dir}/err")"
-	out="$(JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${broken_roc}" JUMPSCRIPT_ROC_WASI_PLATFORM="${wasi_platform}" "${runner}" run --no-runtime-deps Roc "${dir}/${script}" a 2>"${dir}/err")"
+	out="$(PATH="${host_dir}" JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${broken_roc}" "${runner}" run Roc "${dir}/${script}" a 2>"${dir}/err")"
 	[[ "${out}" == *"Roc hello 1"* ]] || fail "${script} cached: output '${out}', stderr $(cat "${dir}/err")"
 done
 
@@ -126,7 +125,7 @@ for spec in "hello.lua.roc:luajit" "hello.wasm.roc:wasmtime"; do
 	dir="${tmp_root}/flake-${script}.d"
 	mkdir -p "${dir}"
 	cp "${repo_root}/tests/fixtures/${script}" "${dir}/${script}"
-	out="$(JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${roc_bin}" JUMPSCRIPT_ROC_WASI_PLATFORM="${wasi_platform}" "${runner}" run Roc "${dir}/${script}" x x 2>"${dir}/err")"
+	out="$(PATH="${host_dir}" JUMPSCRIPT_CACHE="${dir}/cache" "${runner}" run Roc "${dir}/${script}" x x 2>"${dir}/err")"
 	[[ "${out}" == *"Roc hello 2"* ]] || fail "flake ${tool}: output '${out}', stderr $(cat "${dir}/err")"
 done
 
@@ -142,7 +141,7 @@ for spec in "hello.roc:Roc" "hello.lua.roc:Roc-luajit" "hello.wasm.roc:Roc-wasm"
 		tail -n +2 "${repo_root}/tests/fixtures/${fixture}"
 	} > "${dir}/hello"
 	chmod +x "${dir}/hello"
-	out="$(PATH="${repo_root}/bin:${PATH}" JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${roc_bin}" JUMPSCRIPT_ROC_WASI_PLATFORM="${wasi_platform}" "${dir}/hello" p q r s 2>"${dir}/err")"
+	out="$(PATH="${repo_root}/bin:${host_dir}" JUMPSCRIPT_CACHE="${dir}/cache" "${dir}/hello" p q r s 2>"${dir}/err")"
 	[[ "${out}" == *"Roc hello 4"* ]] || fail "extensionless ${token}: output '${out}', stderr $(cat "${dir}/err")"
 done
 
