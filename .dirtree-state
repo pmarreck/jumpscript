@@ -15,6 +15,7 @@ annotate=[
 	build.zig = Zig build: core unit tests (zig build test); default ReleaseFast
 	docs/PLAN_LOG.md = Retired plan items, append-only
 	docs/plan_context = Background for plan items
+	docs/plan_context/toolchain_pins.md = Draft lookup rules for toolchain pins: script directive, plugin flake.lock, jumpscript update
 	flake.nix = Dev shell, packages.default (runner plus plugins), checks
 	plugins/_lib/plugin_lib.bash = Pure-Bash stand-ins for cat, tail and grep used by plugins before Nix supplies tools
 	src/core.zig = Zig runner pure core: argv parsing, meta parse/validate, out_rel containment, runtime expansion, deps, cache entry key, staleness, meta-cache key and file format
