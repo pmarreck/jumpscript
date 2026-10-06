@@ -9,3 +9,4 @@ zig-out
 .zig-cache
 zig-pkg
 /bin/jumpscript
+/inbox/
