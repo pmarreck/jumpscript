@@ -2,7 +2,7 @@
 Open work for jumpscript, highest priority first. Managed with the planning-work routine: completed items retire to docs/PLAN_LOG.md, background lives in docs/plan_context/ (start with project_overview.md).
 
 ## Now
-- [ ] Keep cached artifacts runnable across Nix garbage collection: root each build environment (for example `nix develop --profile <entry>/.gcroot`) so a binary's dynamic loader and libraries stay in the store; test by collecting garbage between a build and a warm run
+- [x] Cached artifacts survive Nix garbage collection: after each build the runner scans the artifact for store paths and roots them in its cache entry (`nix build --offline --out-link .gcroot`); tests/test_gc_roots.sh checks registered roots, passes on Linux x86_64 and macOS aarch64 (done 2026-10-06 14:30 EDT)
 - [x] Build cache entries carry a toolchain digest (plugin files such as flake.nix/flake.lock, plus the build command), so a new pin rebuilds instead of running a binary whose glibc was garbage-collected; test_shebang_roundtrip uses a private cache (done 2026-10-06 11:20 EDT)
 - [x] Plugin pins nixos-24.05 to nixos-26.05 (Zig 0.16, Lean 4.29, GCC 15, Rust 1.95); Zig fixtures ported to 0.16; Crystal held at 1.18; every suite but Roc passes on macOS aarch64 (done 2026-10-04 17:25 EDT) (context: docs/plan_context/macos.md)
 - [ ] Toolchain pins (BDFN walking brief V3, 2026-10-06): repository-level pins are each plugin's own flake.nix/flake.lock, a CLI command updates them, a script may override with a nixpkgs commit hash in a comment; draft the lookup rules for BDFN, then implement (INTENT.md) (context: docs/plan_context/toolchain_pins.md)
@@ -15,7 +15,6 @@ Open work for jumpscript, highest priority first. Managed with the planning-work
 - [x] --about prints version, purpose, OS and architecture (done 2026-10-04 16:02 EDT, 36a02ec)
 - [x] Zig runner replaces the Bash runner, with a plugin meta cache: warm run 180 ms to 1.1 ms (done 2026-10-04 15:45 EDT, 4bb74a5 + 4260ba8) (context: docs/plan_context/zig_runner.md)
 - [x] Roc-luajit and Roc-wasm shebang tokens for extensionless Roc scripts (done 2026-10-04 13:30 EDT, 44bfce9)
-- [x] Roc .wasm.roc scripts build for wasm32 and run under wasmtime (done 2026-10-03 13:55 EDT, 3b796f1)
 
 ## Next
 - [ ] Dependency tracking for the remaining languages (WAT module graphs, language package managers); C headers, Nim includes, Rust modules, Crystal requires, Idris imports, Lean modules, Zig imports and D modules are tracked
@@ -26,7 +25,8 @@ Open work for jumpscript, highest priority first. Managed with the planning-work
 - [ ] Host tool availability: warn when --no-* is set but required host binaries are missing; document in README and plugin help
 - [ ] Host-runtime metadata: let every plugin record resolved runtime binaries in its cache entry, as Wat does
 - [ ] Nix environment delta caching for warm rebuilds (context: docs/plan_context/nix_env_delta.md)
-- [ ] Cache management CLI: cache ls and clean, rebuild triggers for toolchain version updates
+- [ ] Cache management CLI: cache ls and clean, rebuild triggers for toolchain version updates; clean must drop stale entries, whose .gcroot links otherwise keep old closures alive
+- [ ] Silence the cc-wrapper `--target arm64-apple-macos14.0` and missing clang lib dir `ld` warnings in macOS suite output
 - [ ] Plugin management CLI: plugins list, structured errors, doctor integration
 - [ ] Configuration and security hardening: environment overrides, telemetry hooks, permission enforcement, diagnostics polish
 

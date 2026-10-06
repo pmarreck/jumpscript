@@ -326,6 +326,76 @@ pub fn needsBuild(artifact_mtime_ns: ?i128, newest_mtime_ns: i128) bool {
 	return m != newest_mtime_ns;
 }
 
+test "storeRefs: distinct store paths in first-seen order, cut at the first byte a name cannot hold" {
+	const arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+	var arena = arena_state;
+	defer arena.deinit();
+	const a = arena.allocator();
+	const glibc = "/nix/store/znb3q6g1ik34454j3vcjx824h1871asg-glibc-2.42-84";
+	const gcc = "/nix/store/2ga5nd1m56n5cx2wh8vbf6nrdhqk2f0q-gcc-15.3.0-lib";
+	const bytes = "\x7fELF\x00" ++ glibc ++ "/lib/ld-linux-x86-64.so.2\x00junk" ++ gcc ++ ":" ++ glibc ++ "\x00";
+	const got = try storeRefs(a, bytes);
+	try std.testing.expectEqual(@as(usize, 2), got.len);
+	try std.testing.expectEqualStrings(glibc, got[0]);
+	try std.testing.expectEqualStrings(gcc, got[1]);
+	try std.testing.expectEqualStrings(glibc, (try storeRefs(a, glibc))[0]);
+}
+
+test "storeRefs: rejects what only looks like a store path" {
+	const arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+	var arena = arena_state;
+	defer arena.deinit();
+	const a = arena.allocator();
+	const not_refs = [_][]const u8{
+		"",
+		"/nix/store/",
+		"/nix/store/znb3q6g1ik34454j3vcjx824h1871asg-",
+		"/nix/store/znb3q6g1ik34454j3vcjx824h1871asg/glibc",
+		"/nix/store/znb3q6g1ik34454j3vcjx824h1871as-glibc",
+		"/nix/store/enb3q6g1ik34454j3vcjx824h1871asg-glibc",
+		"/nix/store/Znb3q6g1ik34454j3vcjx824h1871asg-glibc",
+		"/nix/stor/znb3q6g1ik34454j3vcjx824h1871asg-glibc",
+	};
+	for (not_refs) |bytes| try std.testing.expectEqual(@as(usize, 0), (try storeRefs(a, bytes)).len);
+}
+
+/// The Nix store paths an artifact names, found by scanning its bytes for
+/// `/nix/store/<32 base-32 chars>-<name>`, the way Nix finds a build
+/// output's references. Rooting them keeps the artifact's dynamic loader
+/// and libraries through garbage collection. Allocate from an arena.
+pub fn storeRefs(arena: std.mem.Allocator, bytes: []const u8) ![]const []const u8 {
+	const prefix = "/nix/store/";
+	const hash_len = 32;
+	var refs: std.ArrayList([]const u8) = .empty;
+	var rest: usize = 0;
+	while (std.mem.indexOfPos(u8, bytes, rest, prefix)) |start| {
+		const hash_at = start + prefix.len;
+		rest = hash_at;
+		const name_at = hash_at + hash_len + 1;
+		if (name_at > bytes.len or bytes[name_at - 1] != '-') continue;
+		const all_base32 = for (bytes[hash_at .. hash_at + hash_len]) |c| {
+			if (std.mem.indexOfScalar(u8, nix_base32, c) == null) break false;
+		} else true;
+		if (!all_base32) continue;
+		var end = name_at;
+		while (end < bytes.len and isStoreNameChar(bytes[end])) end += 1;
+		if (end == name_at) continue;
+		const ref = bytes[start..end];
+		rest = end;
+		for (refs.items) |seen| {
+			if (eql(seen, ref)) break;
+		} else try refs.append(arena, ref);
+	}
+	return refs.items;
+}
+
+/// Nix's base-32 alphabet: digits and lowercase letters without e, o, u, t.
+const nix_base32 = "0123456789abcdfghijklmnpqrsvwxyz";
+
+fn isStoreNameChar(c: u8) bool {
+	return std.ascii.isAlphanumeric(c) or std.mem.indexOfScalar(u8, "+-._?=", c) != null;
+}
+
 test "metaKeyEnv classifies variables over a set" {
 	const included = [_][]const u8{ "PATH", "JUMPSCRIPT_ROC", "JUMPSCRIPT_ROC_WASI_PLATFORM", "JUMPSCRIPT_CACHE", "JUMPSCRIPT_PLUGINS_DIR", "JUMPSCRIPT_DEBUG" };
 	const excluded = [_][]const u8{ "HOME", "PWD", "OLDPWD", "SHLVL", "_", "PATHX", "MY_JUMPSCRIPT_X", "jumpscript_roc", "JUMPSCRIPT", "JUMPSCRIPT_NO_BUILD_DEPS", "JUMPSCRIPT_NO_RUNTIME_DEPS" };

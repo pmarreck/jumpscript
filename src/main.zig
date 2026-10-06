@@ -521,12 +521,32 @@ fn build(ctx: Ctx, b: BuildRequest) void {
 	const status = exitStatus(child.wait(ctx.io) catch |e| ctx.die(1, "unable to wait for plugin '{s}' build: {t}", .{ b.lang, e }));
 	if (status != 0) ctx.die(status, "plugin '{s}' build command failed with exit code {d}", .{ b.lang, status });
 	if (!isFile(ctx, b.artifact)) ctx.die(1, "plugin '{s}' build command did not produce artifact '{s}'", .{ b.lang, b.meta.out_rel });
+	rootStoreRefs(ctx, b);
 
 	const ref = statPath(ctx, b.freshest) orelse ctx.die(1, "unable to determine mtime for '{s}'", .{b.freshest});
 	ctx.cwd.setTimestamps(ctx.io, b.artifact, .{
 		.access_timestamp = .init(ref.atime),
 		.modify_timestamp = .{ .new = ref.mtime },
 	}) catch |e| ctx.die(1, "unable to stamp artifact '{s}': {t}", .{ b.artifact, e });
+}
+
+/// Registers a GC root in the cache entry for every store path the artifact
+/// names (`nix build --out-link .gcroot`, which links `.gcroot`, `.gcroot-1`
+/// and so on), so garbage collection cannot delete the loader or libraries
+/// a cached binary needs. Paths absent from this store (strings a program
+/// merely prints) are skipped; the rest are present, so this runs offline.
+fn rootStoreRefs(ctx: Ctx, b: BuildRequest) void {
+	const bytes = ctx.cwd.readFileAlloc(ctx.io, b.artifact, ctx.arena, .unlimited) catch |e| ctx.die(1, "unable to read artifact '{s}': {t}", .{ b.artifact, e });
+	var argv: std.ArrayList([]const u8) = .empty;
+	argv.appendSlice(ctx.arena, &.{ "nix", "build", "--offline", "--out-link", ctx.print("{s}/.gcroot", .{b.entry_dir}) }) catch oom();
+	const fixed = argv.items.len;
+	for (core.storeRefs(ctx.arena, bytes) catch oom()) |ref| {
+		if (statPath(ctx, ref) != null) argv.append(ctx.arena, ref) catch oom();
+	}
+	if (argv.items.len == fixed) return;
+	var child = std.process.spawn(ctx.io, .{ .argv = argv.items, .environ_map = ctx.childEnv(&.{}) }) catch |e| ctx.die(1, "unable to run nix to root '{s}': {t}", .{ b.artifact, e });
+	const status = exitStatus(child.wait(ctx.io) catch |e| ctx.die(1, "unable to wait for nix rooting '{s}': {t}", .{ b.artifact, e }));
+	if (status != 0) ctx.die(status, "nix could not register GC roots for '{s}' (exit code {d})", .{ b.artifact, status });
 }
 
 /// Replaces this process with the artifact, or with the plugin's runtime

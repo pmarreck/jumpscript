@@ -22,6 +22,7 @@ annotate=[
 	src/main.zig = Zig runner I/O adapter: plugin lookup, meta cache, secure cache dirs, build, exec
 	tests/lib/host.bash = minimal_host_dir: a PATH dir with only nix and bash for integration tests
 	tests/test_concurrency.sh = Concurrent cold runs: one build per entry; cache dirs never seen with mode other than 700 (strace-forced window on Linux)
+	tests/test_gc_roots.sh = Every store path a cached artifact names has a GC root in its cache entry; absent paths are skipped
 	tests/test_meta_cache.sh = When a cached plugin meta answer is reused or recomputed
 	tests/test_plugin_lib.sh = plugin_lib helpers checked against cat, tail and grep as oracles
 	tests/test_zig_core.sh = Runs the Zig core unit tests in ReleaseFast and Debug
