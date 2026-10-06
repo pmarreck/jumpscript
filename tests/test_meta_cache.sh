@@ -70,23 +70,27 @@ expect "--no-runtime-deps is a separate answer" "fake v1 0" 4 1 -- --no-runtime-
 expect "and it is cached too" "fake v1 0" 4 1 -- --no-runtime-deps Fake "${script}"
 
 set_mtime 1700000000 "${plugins}/Fake/default/plugin"
-expect "a changed plugin file reruns meta" "fake v1 0" 5 1 -- Fake "${script}"
+# The plugin files pin the toolchain (flake.nix, flake.lock), so a change
+# there also rebuilds into a fresh entry: an artifact from an older pin may
+# need store paths that garbage collection has since removed.
+expect "a changed plugin file reruns meta and rebuilds" "fake v1 0" 5 2 -- Fake "${script}"
 echo "extra" > "${plugins}/Fake/default/flake.nix"
-expect "a new file in the plugin directory reruns meta" "fake v1 0" 6 1 -- Fake "${script}"
+expect "a new file in the plugin directory reruns meta and rebuilds" "fake v1 0" 6 3 -- Fake "${script}"
+expect "the rebuilt entry is reused" "fake v1 0" 6 3 -- Fake "${script}"
 
 echo "v2" > "${script}"
 set_mtime 1800000000 "${script}"
-expect "an edited script reruns meta and rebuilds" "fake v2 0" 7 2 -- Fake "${script}"
+expect "an edited script reruns meta and rebuilds" "fake v2 0" 7 4 -- Fake "${script}"
 
 echo "helper" > "${tmp_root}/scripts/helper"
 set_mtime 1800000000 "${tmp_root}/scripts/helper"
 echo "helper" > "${state}/deps"
-expect "declared deps are answered by a new meta" "fake v2 0" 7 2 -- Fake "${script}"
+expect "declared deps are answered by a new meta" "fake v2 0" 7 4 -- Fake "${script}"
 set_mtime 1800000001 "${script}"
-expect "script touched again" "fake v2 0" 8 3 -- Fake "${script}"
-expect "deps cached with the answer" "fake v2 0" 8 3 -- Fake "${script}"
+expect "script touched again" "fake v2 0" 8 5 -- Fake "${script}"
+expect "deps cached with the answer" "fake v2 0" 8 5 -- Fake "${script}"
 set_mtime 1900000000 "${tmp_root}/scripts/helper"
-expect "a changed dependency reruns meta and rebuilds" "fake v2 0" 9 4 -- Fake "${script}"
+expect "a changed dependency reruns meta and rebuilds" "fake v2 0" 9 6 -- Fake "${script}"
 
 # A cached absolute runtime path that vanished (say, garbage-collected from
 # the Nix store) sends the runner back to the plugin for a fresh answer.
@@ -95,12 +99,12 @@ printf '#!/usr/bin/env bash\nexec bash "$@"\n' > "${rt1}"
 chmod +x "${rt1}"
 echo "${rt1}" > "${state}/runtime_path"
 set_mtime 1900000001 "${script}"
-expect "text runtime" "fake v2 0" 10 5 -- Fake "${script}"
-expect "text runtime cached" "fake v2 0" 10 5 -- Fake "${script}"
+expect "text runtime" "fake v2 0" 10 7 -- Fake "${script}"
+expect "text runtime cached" "fake v2 0" 10 7 -- Fake "${script}"
 rt2="${tmp_root}/rt2"
 mv "${rt1}" "${rt2}"
 echo "${rt2}" > "${state}/runtime_path"
-expect "a vanished runtime reruns meta" "fake v2 0" 11 5 -- Fake "${script}"
+expect "a vanished runtime reruns meta" "fake v2 0" 11 7 -- Fake "${script}"
 
 # A failed meta call is reported and never cached.
 touch "${state}/fail_meta"
@@ -109,7 +113,7 @@ out="$(run Fake "${script}")"
 status=$?
 [[ ${status} -eq 3 && "$(cat "${tmp_root}/err")" == *"meta refused"* ]] || fail "failed meta: status ${status}, stderr '$(cat "${tmp_root}/err")'"
 rm -f "${state}/fail_meta"
-expect "after a failure meta runs again" "fake v2 0" 13 6 -- Fake "${script}"
+expect "after a failure meta runs again" "fake v2 0" 13 8 -- Fake "${script}"
 
 if [[ ${failures} -ne 0 ]]; then
 	echo "test_meta_cache: ${failures} failed" >&2

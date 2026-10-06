@@ -198,6 +198,8 @@ const Answer = struct {
 	text: []const u8,
 	meta: core.Meta,
 	deps: []const core.Stamp,
+	/// core.toolchainDigest of the inputs; names the build entry.
+	toolchain: []const u8 = "",
 };
 
 fn run(base_ctx: Ctx, roots: Roots, r: core.Run) noreturn {
@@ -243,7 +245,7 @@ fn run(base_ctx: Ctx, roots: Roots, r: core.Run) noreturn {
 	}
 
 	var key_buf: [Dir.max_path_bytes]u8 = undefined;
-	const key = core.entryKey(&key_buf, std.fs.path.basename(script), newest) catch ctx.die(1, "script name too long", .{});
+	const key = core.entryKey(&key_buf, std.fs.path.basename(script), newest, answer.toolchain) catch ctx.die(1, "script name too long", .{});
 	const entry_dir = ctx.print("{s}/{s}", .{ version_dir, key });
 	ensureSecureDir(ctx, entry_dir, "directory");
 
@@ -331,8 +333,7 @@ const MetaRequest = struct {
 /// The plugin's meta answer: from the meta cache when its key matches and
 /// its stamps and runtime still hold, else from the plugin (then cached).
 fn metaAnswer(ctx: Ctx, req: MetaRequest) Answer {
-	var key_buf: [64]u8 = undefined;
-	const key = core.metaCacheKey(ctx.arena, .{
+	const inputs: core.MetaKeyInputs = .{
 		.plugin_exec = req.plugin_exec,
 		.plugin_files = pluginFiles(ctx, req.plugin_dir),
 		.script = req.script,
@@ -341,10 +342,16 @@ fn metaAnswer(ctx: Ctx, req: MetaRequest) Answer {
 		.skip_build_deps = req.run.skip_build_deps,
 		.skip_runtime_deps = req.run.skip_runtime_deps,
 		.env = keyEnv(ctx),
-	}, &key_buf) catch oom();
+	};
+	var key_buf: [64]u8 = undefined;
+	const key = core.metaCacheKey(ctx.arena, inputs, &key_buf) catch oom();
 	const meta_dir = ctx.print("{s}/{s}", .{ req.cache_root, meta_dir_name });
 	const cache_file = ctx.print("{s}/{s}", .{ meta_dir, key });
-	if (cachedAnswer(ctx, cache_file)) |a| return a;
+	if (cachedAnswer(ctx, cache_file)) |a| {
+		var cached = a;
+		cached.toolchain = toolchainOf(ctx, cached.meta.build_cmd, inputs.plugin_files);
+		return cached;
+	}
 
 	const text = runMeta(ctx, req);
 	const meta = core.parseMeta(text);
@@ -365,7 +372,12 @@ fn metaAnswer(ctx: Ctx, req: MetaRequest) Answer {
 
 	ensureSecureDir(ctx, meta_dir, "directory");
 	storeAnswer(ctx, meta_dir, key, stamps, text);
-	return .{ .text = text, .meta = meta, .deps = stamps };
+	return .{ .text = text, .meta = meta, .deps = stamps, .toolchain = toolchainOf(ctx, meta.build_cmd, inputs.plugin_files) };
+}
+
+fn toolchainOf(ctx: Ctx, build_cmd: []const u8, plugin_files: []const core.FileStamp) []const u8 {
+	const buf = ctx.arena.create([64]u8) catch oom();
+	return core.toolchainDigest(ctx.arena, build_cmd, plugin_files, buf) catch oom();
 }
 
 /// The regular files directly in the plugin directory, stamped for the key.

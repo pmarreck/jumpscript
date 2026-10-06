@@ -101,18 +101,21 @@ err="$(PATH="${host_dir}" JUMPSCRIPT_NO_BUILD_DEPS=1 "${plugin}" meta /scripts/h
 status=$?
 [[ ${status} -ne 0 && "${err}" == *"roc"* && "${err}" == *"--no-build-deps"* ]] || fail "no-build-deps without host roc: status ${status}, stderr '${err}'"
 
-# Real builds: run, then rerun from the cache with a compiler that would fail.
-broken_roc="${tmp_root}/broken-roc"
-printf '#!/usr/bin/env bash\necho "roc should not rerun" >&2\nexit 125\n' > "${broken_roc}"
-chmod +x "${broken_roc}"
+# Real builds: run, then rerun from the cache. A rerun must not write any
+# cache file except meta.env (rewritten on every run): same files, same inodes.
+# (Swapping in a failing compiler would not prove reuse: a different compiler
+# is a different toolchain and rightly rebuilds.)
+cache_files() { find "$1" -type f ! -name meta.env -exec ls -i {} + | sort; }
 for script in hello.lua.roc hello.roc hello.wasm.roc; do
 	dir="${tmp_root}/${script}.d"
 	mkdir -p "${dir}"
 	cp "${repo_root}/tests/fixtures/${script}" "${dir}/${script}"
 	out="$(PATH="${host_dir}" JUMPSCRIPT_CACHE="${dir}/cache" "${runner}" run Roc "${dir}/${script}" a b c 2>"${dir}/err")"
 	[[ "${out}" == *"Roc hello 3"* ]] || fail "${script}: output '${out}', stderr $(cat "${dir}/err")"
-	out="$(PATH="${host_dir}" JUMPSCRIPT_CACHE="${dir}/cache" JUMPSCRIPT_ROC="${broken_roc}" "${runner}" run Roc "${dir}/${script}" a 2>"${dir}/err")"
+	before="$(cache_files "${dir}/cache")"
+	out="$(PATH="${host_dir}" JUMPSCRIPT_CACHE="${dir}/cache" "${runner}" run Roc "${dir}/${script}" a 2>"${dir}/err")"
 	[[ "${out}" == *"Roc hello 1"* ]] || fail "${script} cached: output '${out}', stderr $(cat "${dir}/err")"
+	[[ "$(cache_files "${dir}/cache")" == "${before}" ]] || fail "${script} cached: the rerun rewrote cache files"
 done
 
 # Default runtimes come from the plugin flake (a store path), never from PATH,

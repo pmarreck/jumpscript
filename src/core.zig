@@ -234,10 +234,26 @@ test "resolveDeps: colon list, empty entries skipped, relative to the script's d
 	try std.testing.expectEqual(@as(usize, 0), none.len);
 }
 
-test "entryKey: script basename and the newest source mtime in whole seconds" {
+test "entryKey: script basename, newest source mtime in whole seconds, toolchain digest" {
 	var buf: [256]u8 = undefined;
-	try std.testing.expectEqualStrings("hello.roc-1791134550", try entryKey(&buf, "hello.roc", 1791134550_999999999));
-	try std.testing.expectEqualStrings("x-0", try entryKey(&buf, "x", 5));
+	try std.testing.expectEqualStrings("hello.roc-1791134550-0123456789ab", try entryKey(&buf, "hello.roc", 1791134550_999999999, "0123456789abcdef"));
+	try std.testing.expectEqualStrings("x-0-000000000000", try entryKey(&buf, "x", 5, "000000000000ffff"));
+}
+
+test "toolchainDigest: the build command and the plugin files, in any file order" {
+	const gpa = std.testing.allocator;
+	const files = [_]FileStamp{ .{ .name = "flake.nix", .mtime_ns = 1, .size = 10 }, .{ .name = "plugin", .mtime_ns = 2, .size = 20 } };
+	const meta = "nix develop /p#build --command cc";
+	var want_buf: [64]u8 = undefined;
+	const want = try toolchainDigest(gpa, meta, &files, &want_buf);
+	var got: [64]u8 = undefined;
+	const reordered = [_]FileStamp{ files[1], files[0] };
+	try std.testing.expectEqualStrings(want, try toolchainDigest(gpa, meta, &reordered, &got));
+	const relocked = [_]FileStamp{ .{ .name = "flake.lock", .mtime_ns = 5, .size = 30 }, files[0], files[1] };
+	const lock_edit = [_]FileStamp{ .{ .name = "flake.nix", .mtime_ns = 1, .size = 11 }, files[1] };
+	try std.testing.expect(!std.mem.eql(u8, want, try toolchainDigest(gpa, meta, &relocked, &got)));
+	try std.testing.expect(!std.mem.eql(u8, want, try toolchainDigest(gpa, meta, &lock_edit, &got)));
+	try std.testing.expect(!std.mem.eql(u8, want, try toolchainDigest(gpa, "/opt/roc build", &files, &got)));
 }
 
 test "needsBuild: missing artifact, or its mtime differs from the newest source to the nanosecond" {
@@ -272,10 +288,34 @@ pub fn resolveDeps(arena: std.mem.Allocator, deps: []const u8, script_dir: []con
 	return paths.items;
 }
 
-/// The cache entry directory name: the script's basename and the newest
-/// source mtime in whole seconds (the Bash runner's layout).
-pub fn entryKey(buf: []u8, basename: []const u8, newest_mtime_ns: i128) ![]const u8 {
-	return std.fmt.bufPrint(buf, "{s}-{d}", .{ basename, @divFloor(newest_mtime_ns, std.time.ns_per_s) });
+/// Hex digits of the toolchain digest kept in an entry name.
+pub const entry_digest_len = 12;
+
+/// The cache entry directory name: the script's basename, the newest source
+/// mtime in whole seconds, and the first hex digits of the toolchain digest,
+/// so a changed plugin or pin builds into a fresh entry.
+pub fn entryKey(buf: []u8, basename: []const u8, newest_mtime_ns: i128, toolchain_digest: []const u8) ![]const u8 {
+	return std.fmt.bufPrint(buf, "{s}-{d}-{s}", .{ basename, @divFloor(newest_mtime_ns, std.time.ns_per_s), toolchain_digest[0..entry_digest_len] });
+}
+
+/// Identity of the toolchain a build uses: SHA-256 (hex) over the plugin's
+/// build command (it names the compiler or the flake it enters) and the
+/// plugin directory's file stamps (flake.nix and flake.lock pin what
+/// that flake provides). An artifact built under an older pin would otherwise
+/// outlive it, and its garbage-collected store paths (dynamic loader,
+/// libraries) with it. PATH, other environment and the runtime command do not
+/// enter, so they rebuild only when they change the build command.
+pub fn toolchainDigest(gpa: std.mem.Allocator, build_cmd: []const u8, plugin_files: []const FileStamp, out: *[64]u8) ![]const u8 {
+	return metaCacheKey(gpa, .{
+		.plugin_exec = build_cmd,
+		.plugin_files = plugin_files,
+		.script = "",
+		.script_mtime_ns = 0,
+		.script_size = 0,
+		.skip_build_deps = false,
+		.skip_runtime_deps = false,
+		.env = &.{},
+	}, out);
 }
 
 /// A build is needed unless the artifact exists with exactly the newest

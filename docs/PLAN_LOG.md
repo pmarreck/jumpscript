@@ -12,3 +12,7 @@ Completed PLAN.md items retired by plan-retire, oldest retirement first.
 - [x] [Earlier completions] Direct compile pipeline: C, C++, Crystal, D, Nim, Rust, Zig, Idris, Moon and Wat plugins stream originals without persistent staging (done 2025-11-05)
 - [x] [Earlier completions] D module dependency tracking (done 2025-11-05)
 - [x] [Earlier completions] Zig import dependency tracking (done 2025-11-05)
+
+## Retired 2026-10-06
+
+- [x] [Earlier completions] Lean module cache invalidation via reported .lean dependencies (done 2025-11-05)

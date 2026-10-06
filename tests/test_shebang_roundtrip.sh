@@ -5,6 +5,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
+# A private cache, so artifacts left in the user's cache cannot decide the result.
+export JUMPSCRIPT_CACHE="${tmp_dir}/cache"
 
 run_fixture_via_shebang() {
 	local fixture="$1"
