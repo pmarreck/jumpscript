@@ -17,3 +17,4 @@ Completed PLAN.md items retired by plan-retire, oldest retirement first.
 
 - [x] [Earlier completions] Lean module cache invalidation via reported .lean dependencies (done 2025-11-05)
 - [x] [Now] Roc .wasm.roc scripts build for wasm32 and run under wasmtime (done 2026-10-03 13:55 EDT, 3b796f1)
+- [x] [Now] Roc-luajit and Roc-wasm shebang tokens for extensionless Roc scripts (done 2026-10-04 13:30 EDT, 44bfce9)
